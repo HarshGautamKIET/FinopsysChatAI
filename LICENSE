@@ -1,0 +1,82 @@
+FINOPSYSAI SOFTWARE LICENSE AGREEMENT
+
+Copyright © 2025 FinOpsysAI. All Rights Reserved.
+
+IMPORTANT - READ CAREFULLY: This Software License Agreement ("Agreement") is a legal agreement between you ("Licensee") and FinOpsysAI ("Licensor") for the FinOpsysAI Context-Aware SQL Chatbot software, including any associated documentation, updates, and related materials ("Software").
+
+BY INSTALLING, COPYING, OR OTHERWISE USING THE SOFTWARE, YOU AGREE TO BE BOUND BY THE TERMS OF THIS AGREEMENT. IF YOU DO NOT AGREE TO THE TERMS OF THIS AGREEMENT, DO NOT INSTALL OR USE THE SOFTWARE.
+
+1. GRANT OF LICENSE
+
+Subject to the terms and conditions of this Agreement, FinOpsysAI grants you a limited, non-exclusive, non-transferable, revocable license to use the Software solely for your internal business purposes.
+
+2. RESTRICTIONS
+
+You may not:
+a) Copy, modify, adapt, alter, translate, or create derivative works of the Software
+b) Reverse engineer, disassemble, decompile, or otherwise attempt to derive source code from the Software
+c) Distribute, sublicense, lease, rent, loan, or otherwise transfer the Software to any third party
+d) Remove, alter, or obscure any proprietary notices on the Software
+e) Use the Software for any unlawful purpose or in violation of any applicable laws or regulations
+f) Attempt to circumvent any security measures or access controls implemented in the Software
+
+3. INTELLECTUAL PROPERTY RIGHTS
+
+The Software is protected by copyright laws and international copyright treaties. FinOpsysAI retains all right, title, and interest in and to the Software, including all intellectual property rights therein.
+
+4. VENDOR CONTEXT SECURITY
+
+The Software implements proprietary vendor context isolation technology. You acknowledge that:
+a) The vendor context management system is confidential and proprietary to FinOpsysAI
+b) You will not attempt to bypass or circumvent the vendor isolation mechanisms
+c) You will use the Software only for authorized vendor data access
+
+5. DATA PROTECTION
+
+a) You retain ownership of your data processed through the Software
+b) FinOpsysAI implements technical and organizational measures to protect your data
+c) You are responsible for compliance with applicable data protection laws and regulations
+d) The Software processes data in accordance with the vendor context permissions
+
+6. THIRD-PARTY COMPONENTS
+
+The Software incorporates certain third-party open-source components. Your use of these components is subject to their respective licenses, which are included in the Software distribution.
+
+7. DISCLAIMER OF WARRANTIES
+
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND. FINOPSYSAI DISCLAIMS ALL WARRANTIES, WHETHER EXPRESS, IMPLIED, OR STATUTORY, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+8. LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL FINOPSYSAI BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF PROFITS, DATA, OR USE, ARISING OUT OF OR RELATING TO THIS AGREEMENT OR THE USE OF THE SOFTWARE, REGARDLESS OF THE THEORY OF LIABILITY AND EVEN IF FINOPSYSAI HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+9. INDEMNIFICATION
+
+You agree to indemnify, defend, and hold harmless FinOpsysAI from and against any claims, damages, losses, costs, and expenses (including reasonable attorneys' fees) arising from your use of the Software or violation of this Agreement.
+
+10. TERMINATION
+
+This Agreement is effective until terminated. Your license rights will terminate automatically if you fail to comply with any provision of this Agreement. Upon termination, you must cease all use of the Software and destroy all copies in your possession.
+
+11. EXPORT CONTROL
+
+The Software may be subject to export control laws and regulations. You agree to comply with all applicable export control requirements.
+
+12. GOVERNING LAW
+
+This Agreement shall be governed by and construed in accordance with the laws of [Jurisdiction], without regard to its conflict of laws principles.
+
+13. ENTIRE AGREEMENT
+
+This Agreement constitutes the entire agreement between the parties with respect to the Software and supersedes all prior or contemporaneous understandings regarding such subject matter.
+
+14. CONTACT INFORMATION
+
+For questions regarding this license, please contact:
+FinOpsysAI Legal Department
+Email: legal@finopsysai.com
+
+BY USING THE SOFTWARE, YOU ACKNOWLEDGE THAT YOU HAVE READ THIS AGREEMENT, UNDERSTAND IT, AND AGREE TO BE BOUND BY ITS TERMS.
+
+FinOpsysAI
+Copyright © 2025 FinOpsysAI. All Rights Reserved.
