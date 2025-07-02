@@ -42,6 +42,10 @@ from column_reference_loader import ColumnReferenceLoader
 from llm_response_restrictions import response_restrictions
 from column_keywords_mapping import column_keywords
 
+# Import feedback system
+from feedback.manager import feedback_manager
+from feedback.ui_components import show_feedback_ui, inject_feedback_into_session
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -58,8 +62,9 @@ SNOWFLAKE_CONFIG = {
     'role': config.SNOWFLAKE_ROLE
 }
 
-# Use configuration for API key
+# Use configuration for API keys
 GEMINI_API_KEY = config.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY')
+OPENAI_API_KEY = config.OPENAI_API_KEY or os.getenv('OPENAI_API_KEY')
 TARGET_TABLE = "AI_INVOICE"
 
 class RateLimiter:
@@ -112,93 +117,201 @@ class SecurityManager:
 rate_limiter = RateLimiter(max_requests=30, window_seconds=60)  # 30 requests per minute
 
 class LLMManager:
-    """Manages LLM model initialization with fallback mechanism"""
+    """Manages LLM model initialization with user-selectable providers"""
     def __init__(self):
-        self.primary_model = None
-        self.fallback_model = None
+        self.gemini_model = None
+        self.openai_client = None
+        self.ollama_model = None
         self.active_provider = None
+        self.available_providers = []
+        self.provider_models = {}  # Store model references
         self.column_reference = ColumnReferenceLoader()
         self.column_keywords = column_keywords
         
     def initialize_models(self) -> bool:
-        """Initialize LLM models with Gemini -> Ollama fallback"""
-        # Check if API key is available for Gemini
-        if not GEMINI_API_KEY:
-            logger.warning("⚠️ No Gemini API key provided, skipping Gemini initialization")
-        else:
-            # Try Gemini first
-            try:
-                import google.generativeai as genai
-                genai.configure(api_key=GEMINI_API_KEY)
-                self.primary_model = genai.GenerativeModel('gemini-1.5-flash')
-                
-                # Test Gemini connection
-                test_response = self.primary_model.generate_content("Hello")
-                if test_response and test_response.text:
-                    self.active_provider = "gemini"
-                    logger.info("✅ Gemini AI initialized successfully")
-                    return True
-            except ImportError:
-                logger.warning("❌ Google Generative AI library not installed")
-            except Exception as e:
-                logger.warning(f"❌ Gemini initialization failed: {str(e)}")
+        """Initialize all available LLM models"""
+        success = False
         
-        # Fallback to Ollama DeepSeek
+        # Initialize Gemini
+        if GEMINI_API_KEY:
+            if not validate_api_key_format(GEMINI_API_KEY, 'gemini'):
+                logger.warning("⚠️ Invalid Gemini API key format")
+            else:
+                try:
+                    import google.generativeai as genai
+                    genai.configure(api_key=GEMINI_API_KEY)
+                    self.gemini_model = genai.GenerativeModel(config.DEFAULT_MODEL)
+                    # Test Gemini connection
+                    test_response = self.gemini_model.generate_content("Hello")
+                    if test_response and test_response.text:
+                        self.available_providers.append('gemini')
+                        self.provider_models['gemini'] = self.gemini_model
+                        logger.info(f"✅ Google Gemini initialized successfully (API Key: {mask_api_key(GEMINI_API_KEY)})")
+                        success = True
+                except ImportError:
+                    logger.warning("❌ Google Generative AI library not installed")
+                except Exception as e:
+                    logger.warning(f"⚠️ Gemini initialization failed: {str(e)}")
+        else:
+            logger.warning("⚠️ No Gemini API key provided")
+        
+        # Initialize OpenAI
+        if OPENAI_API_KEY:
+            if not validate_api_key_format(OPENAI_API_KEY, 'openai'):
+                logger.warning("⚠️ Invalid OpenAI API key format")
+            else:
+                try:
+                    import openai
+                    
+                    # Use the modern OpenAI client (v1.0+)
+                    self.openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
+                    
+                    # Test the connection
+                    test_response = self.openai_client.chat.completions.create(
+                        model=config.OPENAI_MODEL,
+                        messages=[{"role": "user", "content": "Hello"}],
+                        max_tokens=10
+                    )
+                    if test_response and test_response.choices:
+                        self.available_providers.append('openai')
+                        self.provider_models['openai'] = self.openai_client
+                        logger.info(f"✅ OpenAI initialized successfully (API Key: {mask_api_key(OPENAI_API_KEY)})")
+                        success = True
+                        
+                except ImportError:
+                    logger.warning("❌ OpenAI library not installed")
+                except Exception as e:
+                    logger.warning(f"⚠️ OpenAI initialization failed: {str(e)}")
+        else:
+            logger.warning("⚠️ No OpenAI API key provided")
+        
+        # Initialize Ollama
         try:
             import ollama
             client = ollama.Client(host=config.OLLAMA_URL)
             response = client.chat(
                 model=config.OLLAMA_MODEL, 
-                messages=[{'role': 'user', 'content': 'Hello'}]            )
+                messages=[{'role': 'user', 'content': 'Hello'}]
+            )
             
             if response and 'message' in response:
-                self.fallback_model = {'client': client, 'model': config.OLLAMA_MODEL}
-                self.active_provider = "ollama"
-                logger.info("✅ Ollama DeepSeek initialized successfully")
-                return True
+                self.ollama_model = {'client': client, 'model': config.OLLAMA_MODEL}
+                self.available_providers.append('ollama')
+                self.provider_models['ollama'] = self.ollama_model
+                logger.info("✅ Ollama initialized successfully")
+                success = True
         except ImportError:
             logger.warning("❌ Ollama library not installed")
         except Exception as e:
-            logger.warning(f"❌ Ollama initialization failed: {str(e)}")
+            logger.warning(f"⚠️ Ollama initialization failed: {str(e)}")
         
-        logger.error("❌ No LLM models available")
-        return False
+        # Set default active provider (Gemini first, then OpenAI, then Ollama)
+        if self.available_providers:
+            if 'gemini' in self.available_providers:
+                self.active_provider = 'gemini'
+            elif 'openai' in self.available_providers:
+                self.active_provider = 'openai'
+            elif 'ollama' in self.available_providers:
+                self.active_provider = 'ollama'
+            
+            logger.info(f"🎯 Active provider set to: {self.active_provider}")
+        else:
+            logger.error("❌ No LLM models available")
+        
+        return success
+    
+    def set_active_provider(self, provider: str) -> bool:
+        """Set the active LLM provider"""
+        if provider in self.available_providers:
+            self.active_provider = provider
+            logger.info(f"🔄 Switched to provider: {provider}")
+            return True
+        else:
+            logger.warning(f"⚠️ Provider {provider} not available")
+            return False
+    
+    def get_provider_display_name(self, provider: str) -> str:
+        """Get user-friendly display name for provider"""
+        display_names = {
+            'gemini': '🤖 Google Gemini',
+            'openai': '🤖 OpenAI GPT',
+            'ollama': '🤖 Ollama (Local)'
+        }
+        return display_names.get(provider, provider.title())
     
     def generate_response(self, prompt: str) -> str:
-        """Generate response using active model with fallback"""
+        """Generate response using active model with fallback and feedback integration"""
         # Check rate limiting
         client_id = st.session_state.get('session_id', 'anonymous')
         if not rate_limiter.is_allowed(client_id):
             return "❌ Rate limit exceeded. Please wait before making another request."
         
+        # Get feedback enhancement if development mode is enabled
+        original_prompt = prompt
+        if feedback_manager.development_mode:
+            feedback_enhancement = feedback_manager.generate_feedback_prompt_enhancement(prompt)
+            if feedback_enhancement:
+                prompt = f"{feedback_enhancement}\n\n{prompt}"
+                logger.info("🔄 Enhanced prompt with feedback guidance")
+        
         try:
-            if self.active_provider == "gemini" and self.primary_model:
-                response = self.primary_model.generate_content(prompt)
+            if self.active_provider == "gemini" and self.gemini_model:
+                response = self.gemini_model.generate_content(prompt)
                 return response.text if response and response.text else "No response generated"
                 
-            elif self.active_provider == "ollama" and self.fallback_model:
-                response = self.fallback_model['client'].chat(
-                    model=self.fallback_model['model'],
+            elif self.active_provider == "openai" and self.openai_client:
+                response = self.openai_client.chat.completions.create(
+                    model=config.OPENAI_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=1000,
+                    temperature=0.7
+                )
+                return response.choices[0].message.content if response.choices else "No response generated"
+                
+            elif self.active_provider == "ollama" and self.ollama_model:
+                response = self.ollama_model['client'].chat(
+                    model=self.ollama_model['model'],
                     messages=[{'role': 'user', 'content': prompt}]
                 )
                 return response['message']['content'] if response and 'message' in response else "No response generated"
                 
         except Exception as e:
-            logger.error(f"❌ Response generation failed: {str(e)}")
-            # Try fallback if primary fails
-            if self.active_provider == "gemini" and self.fallback_model:
-                try:
-                    response = self.fallback_model['client'].chat(
-                        model=self.fallback_model['model'],
-                        messages=[{'role': 'user', 'content': prompt}]
-                    )
-                    self.active_provider = "ollama"
-                    logger.info("🔄 Switched to Ollama fallback after Gemini failure")
-                    return response['message']['content'] if response and 'message' in response else "Fallback failed"
-                except Exception as fallback_error:
-                    logger.error(f"❌ Fallback also failed: {str(fallback_error)}")
+            logger.error(f"❌ Response generation failed with {self.active_provider}: {str(e)}")
             
-        return f"❌ Error: Unable to generate response. Please try again later."
+            # Try fallback providers
+            fallback_providers = [p for p in self.available_providers if p != self.active_provider]
+            for fallback_provider in fallback_providers:
+                try:
+                    logger.info(f"🔄 Trying fallback provider: {fallback_provider}")
+                    
+                    if fallback_provider == "gemini" and self.gemini_model:
+                        response = self.gemini_model.generate_content(prompt)
+                        if response and response.text:
+                            return response.text
+                            
+                    elif fallback_provider == "openai" and self.openai_client:
+                        response = self.openai_client.chat.completions.create(
+                            model=config.OPENAI_MODEL,
+                            messages=[{"role": "user", "content": prompt}],
+                            max_tokens=1000,
+                            temperature=0.7
+                        )
+                        if response.choices:
+                            return response.choices[0].message.content
+                            
+                    elif fallback_provider == "ollama" and self.ollama_model:
+                        response = self.ollama_model['client'].chat(
+                            model=self.ollama_model['model'],
+                            messages=[{'role': 'user', 'content': prompt}]
+                        )
+                        if response and 'message' in response:
+                            return response['message']['content']
+                            
+                except Exception as fallback_error:
+                    logger.error(f"❌ Fallback {fallback_provider} also failed: {str(fallback_error)}")
+                    continue
+            
+        return f"❌ Error: Unable to generate response. All providers failed."
 
 class SnowflakeManager:
     """Enhanced Snowflake manager with connection pooling and security"""
@@ -527,6 +640,14 @@ SQL QUERY:"""
             # Filter the response to remove any sensitive information
             filtered_response = response_restrictions.filter_response(final_response)
             
+            # Store query and response in session state for feedback collection
+            if feedback_manager.development_mode:
+                st.session_state['last_user_query'] = user_question
+                st.session_state['last_ai_response'] = filtered_response
+                st.session_state['last_sql_query'] = sql_query
+                st.session_state['vendor_id'] = self.db_manager.vendor_id
+                st.session_state['case_id'] = getattr(self.db_manager, 'case_id', '')
+            
             return filtered_response
             
         except Exception as e:
@@ -727,6 +848,28 @@ def show_system_metrics():
             active_provider = st.session_state.chat_app.llm_manager.active_provider if 'chat_app' in st.session_state else "None"
             st.metric("AI Provider", active_provider.title() if active_provider else "Not Set")
 
+# Security utilities for API key protection
+def mask_api_key(api_key: str, show_chars: int = 4) -> str:
+    """Mask API key for secure logging and display"""
+    if not api_key:
+        return "Not Set"
+    if len(api_key) <= show_chars * 2:
+        return "***"
+    return f"{api_key[:show_chars]}***{api_key[-show_chars:]}"
+
+def validate_api_key_format(api_key: str, provider: str) -> bool:
+    """Validate API key format for different providers"""
+    if not api_key:
+        return False
+    
+    patterns = {
+        'openai': api_key.startswith('sk-'),
+        'gemini': api_key.startswith('AIza'),
+        'ollama': True  # Ollama doesn't use API keys
+    }
+    
+    return patterns.get(provider, False)
+
 # Streamlit App
 def main():
     # Security check - session timeout
@@ -755,6 +898,9 @@ def main():
         # Store vendor context in session state for persistence
         st.session_state.vendor_id = None
         st.session_state.case_id = None
+    
+    # Initialize feedback system
+    feedback_manager.set_development_mode(config.DEVELOPMENT_MODE)
     
     # Always restore vendor context to database manager if it exists in session state
     # This ensures context persists across page reloads and streamlit reruns
@@ -791,12 +937,61 @@ def main():
         else:
             st.success("✅ System Online")
             
-            # Show active LLM provider
+            # LLM Provider Selection
+            st.header("🤖 AI Model Selection")
+            if st.session_state.chat_app.llm_manager.available_providers:
+                current_provider = st.session_state.chat_app.llm_manager.active_provider
+                
+                # Create provider options with display names
+                provider_options = {}
+                for provider in st.session_state.chat_app.llm_manager.available_providers:
+                    display_name = st.session_state.chat_app.llm_manager.get_provider_display_name(provider)
+                    provider_options[display_name] = provider
+                
+                # Find current selection index
+                current_display_name = st.session_state.chat_app.llm_manager.get_provider_display_name(current_provider)
+                try:
+                    current_index = list(provider_options.keys()).index(current_display_name)
+                except ValueError:
+                    current_index = 0
+                
+                # Provider selection
+                selected_display = st.selectbox(
+                    "Choose AI Provider:",
+                    options=list(provider_options.keys()),
+                    index=current_index,
+                    key="llm_provider_selector",
+                    help="Select which AI model to use for generating responses"
+                )
+                
+                selected_provider = provider_options[selected_display]
+                
+                # Update provider if changed
+                if selected_provider != current_provider:
+                    if st.session_state.chat_app.llm_manager.set_active_provider(selected_provider):
+                        st.success(f"✅ Switched to {selected_display}")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Failed to switch to {selected_display}")
+                
+                # Show current model details
+                if current_provider == "gemini":
+                    st.info(f"📝 Model: {config.DEFAULT_MODEL}")
+                elif current_provider == "openai":
+                    st.info(f"📝 Model: {config.OPENAI_MODEL}")
+                elif current_provider == "ollama":
+                    st.info(f"📝 Model: {config.OLLAMA_MODEL}")
+            else:
+                st.warning("⚠️ No AI providers available")
+            
+            # Show active LLM provider (legacy display for compatibility)
             provider = st.session_state.chat_app.llm_manager.active_provider
             if provider == "gemini":
-                st.info("🤖 Using: Google Gemini AI")
+                st.caption("🤖 Using: Google Gemini AI")
+            elif provider == "openai":
+                st.caption("🤖 Using: OpenAI GPT")
             elif provider == "ollama":
-                st.info("🤖 Using: Ollama DeepSeek (Fallback)")
+                st.caption("🤖 Using: Ollama (Local)")
             
             # Vendor context management
             st.header("👥 Vendor Context")
@@ -877,6 +1072,9 @@ def main():
         create_query_suggestions()
         create_help_section()
         show_system_metrics()
+        
+        # Show feedback UI if development mode is enabled
+        show_feedback_ui()
         
         # Display chat history
         for message in st.session_state.messages:

@@ -5,9 +5,10 @@
 ## ✨ Features
 
 - **🔒 Security First**: Comprehensive security measures including SQL injection protection, rate limiting, and session management
-- **🤖 AI-Powered**: Dual AI model support (Google Gemini with Ollama DeepSeek fallback)
+- **🤖 AI-Powered**: Multi-provider AI support (Google Gemini, OpenAI GPT, Ollama) with user-selectable models
 - **👥 Vendor Context**: Strict vendor-specific data filtering and context management
-- **� Item Processing**: Intelligent parsing and expansion of JSON arrays and CSV item data
+- **🛠️ Vector Feedback System**: Developer feedback with semantic search and prompt enhancement
+- **📊 Item Processing**: Intelligent parsing and expansion of JSON arrays and CSV item data
 - **📥 Export Options**: Download results in CSV, Excel, and JSON formats
 - **⚡ Performance Optimized**: Query caching, optimization hints, and connection management
 - **🎨 User-Friendly**: Intuitive interface with query suggestions and comprehensive help
@@ -82,11 +83,18 @@ streamlit run streamlit/src/app.py
 | `SNOWFLAKE_SCHEMA` | ❌ | `PUBLIC` | Snowflake schema name |
 | `SNOWFLAKE_ROLE` | ❌ | `ACCOUNTADMIN` | Snowflake role |
 | `GEMINI_API_KEY` | ❌ | - | Google Gemini API key |
+| `OPENAI_API_KEY` | ❌ | - | OpenAI API key |
+| `OPENAI_MODEL` | ❌ | `gpt-3.5-turbo` | OpenAI model name |
 | `OLLAMA_URL` | ❌ | `http://localhost:11434` | Ollama server URL |
 | `OLLAMA_MODEL` | ❌ | `deepseek-r1:1.5b` | Ollama model name |
 | `SESSION_TIMEOUT` | ❌ | `3600` | Session timeout in seconds |
 | `MAX_QUERY_RESULTS` | ❌ | `1000` | Maximum query result rows |
 | `RATE_LIMIT_REQUESTS` | ❌ | `30` | Rate limit requests per minute |
+| `DEVELOPMENT_MODE` | ❌ | `false` | Enable feedback UI (true/false) |
+| `FAISS_INDEX_PATH` | ❌ | `./feedback_data/faiss_index` | FAISS vector index file path |
+| `FEEDBACK_DATA_PATH` | ❌ | `./feedback_data/feedback.json` | Feedback JSON data file path |
+| `FEEDBACK_SIMILARITY_THRESHOLD` | ❌ | `0.85` | Feedback similarity threshold (0.0-1.0) |
+| `FEEDBACK_MAX_RESULTS` | ❌ | `5` | Max similar feedback items to retrieve |
 
 ### Database Schema
 
@@ -151,6 +159,39 @@ The application intelligently handles invoice line items stored in multiple form
 - "Show me line item details"
 - "What products are on my invoices?"
 - "Break down my invoice items"
+
+## 🛠️ Vector Feedback System
+
+FinOpSysAI includes a comprehensive feedback system for improving AI response quality through developer insights.
+
+### Features
+- **🔍 Semantic Search**: Vector-based similarity search using FAISS and Gemini embeddings
+- **📝 Developer Portal**: Complete feedback management interface (development mode only)
+- **🚀 Prompt Enhancement**: Automatic injection of relevant feedback during inference
+- **📊 Analytics**: Comprehensive feedback statistics and export tools
+- **🔐 Security**: Development/production mode toggle for secure deployment
+
+### Quick Setup
+```bash
+# Run the automated setup
+python setup_feedback_system.py
+
+# Or manual setup
+pip install faiss-cpu>=1.7.4
+
+# Configure environment
+echo "DEVELOPMENT_MODE=true" >> .env
+echo "FAISS_INDEX_PATH=./feedback_data/faiss_index" >> .env
+```
+
+### Usage
+1. Enable development mode: `DEVELOPMENT_MODE=true` in `.env`
+2. Use the application normally to generate AI responses
+3. Access "🛠️ Developer Feedback Portal" in the sidebar
+4. Provide feedback, corrections, and improvements
+5. Test retrieval system and view analytics
+
+For detailed documentation, see [`FEEDBACK_SYSTEM_README.md`](FEEDBACK_SYSTEM_README.md)
 
 ## 🔒 Security Best Practices
 
