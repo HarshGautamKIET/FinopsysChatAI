@@ -1,17 +1,17 @@
 # 💼 FinOpSysAI
 
-**FinOpSysAI** is Finopsys' financial data assistant designed to help you analyze your invoice data. This secure, production-ready application provides vendor-specific database querying with AI-powered natural language interface.
+**FinOpSysAI** is Finopsys' AI-powered financial data assistant designed to help you analyze invoice data through natural language queries. This secure, production-ready application provides vendor-specific database access with intelligent AI-powered analysis.
 
-## ✨ Features
+## ✨ Core Features
 
-- **🔒 Security First**: Comprehensive security measures including SQL injection protection, rate limiting, and session management
-- **🤖 AI-Powered**: Multi-provider AI support (Google Gemini, OpenAI GPT, Ollama) with user-selectable models
-- **👥 Vendor Context**: Strict vendor-specific data filtering and context management
-- **🛠️ Vector Feedback System**: Developer feedback with semantic search and prompt enhancement
-- **📊 Item Processing**: Intelligent parsing and expansion of JSON arrays and CSV item data
-- **📥 Export Options**: Download results in CSV, Excel, and JSON formats
-- **⚡ Performance Optimized**: Query caching, optimization hints, and connection management
-- **🎨 User-Friendly**: Intuitive interface with query suggestions and comprehensive help
+- **🔒 Enterprise Security**: Multi-layer SQL injection protection, rate limiting, session management, and audit logging
+- **🤖 Multi-Provider AI**: Google Gemini, OpenAI GPT, and Ollama DeepSeek with automatic fallback
+- **👥 Vendor Context Management**: Strict vendor-specific data filtering with session-persistent context
+- **🧠 Intelligent Feedback System**: Vector-based feedback enhancement with semantic search capabilities
+- **📊 Advanced Item Processing**: Smart parsing of JSON arrays and CSV item data with automatic expansion
+- **� Flexible Export**: Download results in CSV, Excel, and JSON formats
+- **⚡ High Performance**: Query caching, optimization, connection pooling, and result limiting
+- **🎨 Intuitive Interface**: User-friendly design with query suggestions and comprehensive help system
 
 ## 🛡️ Security Features
 
@@ -27,51 +27,58 @@
 ### Prerequisites
 
 - Python 3.8+
-- Snowflake account with access credentials
-- Optional: Google Gemini API key for enhanced AI features
+- Snowflake account with proper credentials
+- API keys for AI providers (Google Gemini recommended)
 
 ### Installation
 
-1. **Navigate to the application directory**
-```bash
-cd chatbot_SQL
+1. **Clone or extract the application**
+```powershell
+# Navigate to the application directory
+cd "e:\Finopsys\FinOpsysChatAI\chatbot_SQL - Copy"
 ```
 
-2. **Install dependencies**
-```bash
+2. **Install required dependencies**
+```powershell
 pip install -r requirements.txt
 ```
 
-3. **Set up environment variables**
-```bash
-# Copy the environment template
-cp .env.example .env
-
-# Edit .env with your actual credentials
-# Required:
+3. **Configure environment variables**
+Create a `.env` file in the root directory with your credentials:
+```env
+# Required Database Configuration
 SNOWFLAKE_ACCOUNT=your_account_here
 SNOWFLAKE_USER=your_username_here
 SNOWFLAKE_PASSWORD=your_password_here
 SNOWFLAKE_WAREHOUSE=your_warehouse_here
 SNOWFLAKE_DATABASE=your_database_here
+SNOWFLAKE_SCHEMA=PUBLIC
+SNOWFLAKE_ROLE=ACCOUNTADMIN
 
-# Optional (for enhanced AI features):
-GEMINI_API_KEY=your_api_key_here
+# Optional AI Provider Keys (at least one recommended)
+GEMINI_API_KEY=your_gemini_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Optional Advanced Configuration
+DEVELOPMENT_MODE=false
+SESSION_TIMEOUT=3600
+MAX_QUERY_RESULTS=1000
+RATE_LIMIT_REQUESTS=30
 ```
 
-4. **Run the application**
-```bash
+4. **Launch the application**
+```powershell
 streamlit run streamlit/src/app.py
 ```
 
 5. **Access the application**
 - Open your browser to `http://localhost:8501`
-- Initialize the system using the sidebar
+- Initialize the system using the sidebar options
 - Select a case ID to establish vendor context
-- Start asking questions about your data!
+- Start querying your financial data!
 ## 🔧 Configuration
 
-### Environment Variables
+### Core Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
@@ -82,19 +89,29 @@ streamlit run streamlit/src/app.py
 | `SNOWFLAKE_DATABASE` | ✅ | `DEMO_DB` | Snowflake database name |
 | `SNOWFLAKE_SCHEMA` | ❌ | `PUBLIC` | Snowflake schema name |
 | `SNOWFLAKE_ROLE` | ❌ | `ACCOUNTADMIN` | Snowflake role |
-| `GEMINI_API_KEY` | ❌ | - | Google Gemini API key |
+
+### AI Provider Configuration
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GEMINI_API_KEY` | ❌ | - | Google Gemini API key (recommended) |
 | `OPENAI_API_KEY` | ❌ | - | OpenAI API key |
 | `OPENAI_MODEL` | ❌ | `gpt-3.5-turbo` | OpenAI model name |
 | `OLLAMA_URL` | ❌ | `http://localhost:11434` | Ollama server URL |
 | `OLLAMA_MODEL` | ❌ | `deepseek-r1:1.5b` | Ollama model name |
+
+### Advanced Configuration
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DEVELOPMENT_MODE` | ❌ | `false` | Enable feedback UI (true/false) |
 | `SESSION_TIMEOUT` | ❌ | `3600` | Session timeout in seconds |
 | `MAX_QUERY_RESULTS` | ❌ | `1000` | Maximum query result rows |
 | `RATE_LIMIT_REQUESTS` | ❌ | `30` | Rate limit requests per minute |
-| `DEVELOPMENT_MODE` | ❌ | `false` | Enable feedback UI (true/false) |
-| `FAISS_INDEX_PATH` | ❌ | `./feedback_data/faiss_index` | FAISS vector index file path |
-| `FEEDBACK_DATA_PATH` | ❌ | `./feedback_data/feedback.json` | Feedback JSON data file path |
-| `FEEDBACK_SIMILARITY_THRESHOLD` | ❌ | `0.85` | Feedback similarity threshold (0.0-1.0) |
-| `FEEDBACK_MAX_RESULTS` | ❌ | `5` | Max similar feedback items to retrieve |
+| `FAISS_INDEX_PATH` | ❌ | `./feedback_data/faiss_index` | FAISS vector index path |
+| `FEEDBACK_DATA_PATH` | ❌ | `./feedback_data/feedback.json` | Feedback data path |
+| `FEEDBACK_SIMILARITY_THRESHOLD` | ❌ | `0.85` | Feedback similarity threshold |
+| `FEEDBACK_MAX_RESULTS` | ❌ | `5` | Max feedback items to retrieve |
 
 ### Database Schema
 
@@ -160,38 +177,35 @@ The application intelligently handles invoice line items stored in multiple form
 - "What products are on my invoices?"
 - "Break down my invoice items"
 
-## 🛠️ Vector Feedback System
+## 🛠️ Intelligent Feedback System
 
-FinOpSysAI includes a comprehensive feedback system for improving AI response quality through developer insights.
+FinOpSysAI includes an advanced vector-based feedback system that continuously improves AI response quality through developer insights and semantic enhancement.
 
-### Features
-- **🔍 Semantic Search**: Vector-based similarity search using FAISS and Gemini embeddings
-- **📝 Developer Portal**: Complete feedback management interface (development mode only)
-- **🚀 Prompt Enhancement**: Automatic injection of relevant feedback during inference
-- **📊 Analytics**: Comprehensive feedback statistics and export tools
-- **🔐 Security**: Development/production mode toggle for secure deployment
+### Key Capabilities
+- **🔍 Vector-Based Search**: FAISS-powered semantic similarity using Gemini embeddings
+- **📝 Developer Portal**: Comprehensive feedback management interface (development mode)
+- **🚀 Automatic Enhancement**: Real-time injection of relevant feedback during AI inference
+- **📊 Performance Analytics**: Detailed feedback statistics and data export tools
+- **🔐 Environment-Aware**: Secure development/production mode toggle
 
-### Quick Setup
-```bash
-# Run the automated setup
-python setup_feedback_system.py
-
-# Or manual setup
+### Quick Setup for Development
+```powershell
+# Install vector search dependencies
 pip install faiss-cpu>=1.7.4
 
-# Configure environment
-echo "DEVELOPMENT_MODE=true" >> .env
-echo "FAISS_INDEX_PATH=./feedback_data/faiss_index" >> .env
+# Enable development mode in .env
+echo "DEVELOPMENT_MODE=true" | Out-File -Append .env
+
+# Initialize feedback system (optional - auto-created on first use)
+mkdir feedback_data -ErrorAction SilentlyContinue
 ```
 
-### Usage
-1. Enable development mode: `DEVELOPMENT_MODE=true` in `.env`
-2. Use the application normally to generate AI responses
-3. Access "🛠️ Developer Feedback Portal" in the sidebar
-4. Provide feedback, corrections, and improvements
-5. Test retrieval system and view analytics
-
-For detailed documentation, see [`FEEDBACK_SYSTEM_README.md`](FEEDBACK_SYSTEM_README.md)
+### Usage Workflow
+1. **Enable Development Mode**: Set `DEVELOPMENT_MODE=true` in your `.env` file
+2. **Generate Responses**: Use the application normally to create AI responses
+3. **Provide Feedback**: Access "🛠️ Developer Feedback Portal" in the sidebar
+4. **Review Analytics**: Monitor feedback effectiveness and system improvements
+5. **Export Data**: Download feedback data for analysis and backup
 
 ## 🔒 Security Best Practices
 
@@ -229,51 +243,61 @@ For detailed documentation, see [`FEEDBACK_SYSTEM_README.md`](FEEDBACK_SYSTEM_RE
    - Large result sets are automatically limited
    - Use specific questions for better performance
 
-## 🛠️ Development
+## 🛠️ Development & Architecture
 
 ### Project Structure
 
 ```
 FinOpSysAI/
-├── streamlit/src/app.py              # Main application
-├── utils/
-│   ├── error_handler.py              # Error handling utilities
-│   ├── query_validator.py            # SQL query validation
+├── streamlit/src/app.py              # Main Streamlit application
+├── feedback/                         # Feedback system components
+│   ├── manager.py                    # Feedback management
+│   ├── ui_components.py              # UI components
+│   └── vector_store.py               # Vector storage
+├── utils/                           # Core utilities
+│   ├── error_handler.py              # Error handling
+│   ├── query_validator.py            # SQL validation
 │   ├── query_optimizer.py            # Query optimization
-│   └── delimited_field_processor.py  # Item processing utilities
+│   └── delimited_field_processor.py  # Item processing
 ├── config.py                         # Configuration management
-├── column_reference_loader.py        # Database column mapping
-├── column_keywords_mapping.py        # Keywords mapping
+├── column_reference_loader.py        # Database schema mapping
+├── column_keywords_mapping.py        # Keyword mappings
+├── llm_response_restrictions.py      # LLM response control
 ├── requirements.txt                  # Python dependencies
-├── .env.example                      # Environment template
-└── README.md                         # This file
+├── .env                              # Environment configuration
+└── README.md                         # Documentation
 ```
 
-### Testing
+### System Validation
 
-```bash
-# Run the application in development mode
+```powershell
+# Validate system integrity after setup
+python validate_system.py
+
+# Run the application
 streamlit run streamlit/src/app.py --server.port 8501
-
-# For production deployment, consider using:
-# - Gunicorn or similar WSGI server
-# - Docker containers
-# - Load balancers
-# - Database connection pooling
 ```
 
-## 🚨 Security Fixes Applied
+### Production Deployment Considerations
 
-This version includes comprehensive security improvements:
+- **HTTPS/TLS**: Deploy behind secure proxy (nginx/Apache)
+- **Load Balancing**: Distribute traffic across multiple instances
+- **Database Pooling**: Implement connection pooling for scalability
+- **Monitoring**: Set up application and infrastructure monitoring
+- **Backup**: Regular backup of feedback data and configurations
+- **Security**: Network access controls and VPN for sensitive data
 
-- ✅ Removed all hardcoded credentials
-- ✅ Implemented comprehensive SQL injection protection
-- ✅ Added rate limiting and session management
-- ✅ Enhanced error handling and logging
-- ✅ Added query validation and optimization
-- ✅ Implemented secure session management
+## 🚨 Production-Ready Security
 
-See `SECURITY_FIXES_SUMMARY.md` for detailed information.
+This version is production-ready with comprehensive security implementations:
+
+- ✅ **Zero Hardcoded Credentials**: All credentials managed via environment variables
+- ✅ **Advanced SQL Injection Protection**: Multi-layer query validation and sanitization
+- ✅ **Rate Limiting & Session Management**: Configurable limits with secure session handling
+- ✅ **Comprehensive Error Handling**: Robust error management with detailed logging
+- ✅ **Query Validation & Optimization**: Performance-optimized with security validation
+- ✅ **Vendor Context Isolation**: Strict data access controls per vendor
+- ✅ **Audit Logging**: Complete security event tracking and monitoring
 
 ## 📈 Performance Optimizations
 
@@ -298,31 +322,47 @@ See `SECURITY_FIXES_SUMMARY.md` for detailed information.
    - Verify API endpoints are accessible
 
 3. **Rate Limit Exceeded**
-   - Wait for the rate limit window to reset
+   - Wait for the rate limit window to reset (1 minute)
    - Reduce query frequency
    - Contact administrator for limit adjustments
 
+4. **Session Timeout**
+   - Sessions expire after 1 hour for security
+   - Re-initialize the system if prompted
+   - Check session timeout settings in configuration
+
 ### Getting Help
 
-- Check the help section in the application (❓ icon)
-- Review error messages in the application logs
-- Ensure all environment variables are properly set
-- Verify database schema matches expectations
+- Use the **❓ Help** section in the application sidebar
+- Review error messages and logs for specific issues
+- Ensure all required environment variables are properly configured
+- Verify Snowflake database schema matches expected structure
+- Check that your vendor context is properly established
+
+### Support Resources
+
+- **Application Logs**: Check console output for detailed error information
+- **Network Connectivity**: Ensure proper access to Snowflake and API endpoints
+- **Permissions**: Verify database and warehouse access permissions
+- **System Requirements**: Confirm Python 3.8+ and all dependencies are installed
 
 ## 📄 License
 
-This project is proprietary software. See `LICENSE` file for details.
+This project is proprietary software owned by FinOpsysAI. See the `LICENSE` file for complete terms and conditions.
 
-## 🔮 Future Enhancements
+## 🔮 Roadmap & Future Enhancements
 
-- **Multi-tenant Support**: Support for multiple organizations
-- **Advanced Analytics**: Custom dashboards and reporting
-- **API Endpoints**: REST API for programmatic access
-- **Real-time Notifications**: Alerts and updates
-- **Enhanced Security**: Multi-factor authentication, OAuth
-- **Performance**: Redis caching, connection pooling
-- **Mobile Support**: Responsive design improvements
+- **🏢 Multi-Tenant Architecture**: Support for multiple organizations and databases
+- **📊 Advanced Analytics**: Custom dashboards, reporting, and data visualization
+- **🔌 REST API**: Programmatic access endpoints for integration
+- **🔔 Real-Time Notifications**: Alerts, webhooks, and automated reporting
+- **🔐 Enhanced Authentication**: Multi-factor authentication, OAuth, SSO integration
+- **⚡ Performance Scaling**: Redis caching, connection pooling, distributed processing
+- **📱 Mobile Optimization**: Enhanced responsive design and mobile-first features
+- **🤖 AI Model Management**: Fine-tuning, custom models, and advanced AI features
 
 ---
 
-**💼 Ready to get started?** Follow the Quick Start guide above and begin exploring your financial data with FinOpSysAI's AI-powered natural language queries!
+**� Ready to start analyzing your financial data?** 
+
+Follow the Quick Start guide above to get FinOpSysAI running in your environment. Within minutes, you'll be asking natural language questions about your invoice data and getting AI-powered insights!

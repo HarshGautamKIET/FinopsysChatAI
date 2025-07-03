@@ -1,14 +1,14 @@
 FINOPSYSAI SOFTWARE LICENSE AGREEMENT
 
-Copyright © 2025 FinOpsysAI. All Rights Reserved.
+Copyright © 2025 FinOpSysAI & Finopsys. All Rights Reserved.
 
-IMPORTANT - READ CAREFULLY: This Software License Agreement ("Agreement") is a legal agreement between you ("Licensee") and FinOpsysAI ("Licensor") for the FinOpsysAI Context-Aware SQL Chatbot software, including any associated documentation, updates, and related materials ("Software").
+IMPORTANT - READ CAREFULLY: This Software License Agreement ("Agreement") is a legal agreement between you ("Licensee") and FinOpSysAI ("Licensor") for the FinOpSysAI AI-Powered Financial Data Assistant software, including any associated documentation, updates, and related materials ("Software").
 
 BY INSTALLING, COPYING, OR OTHERWISE USING THE SOFTWARE, YOU AGREE TO BE BOUND BY THE TERMS OF THIS AGREEMENT. IF YOU DO NOT AGREE TO THE TERMS OF THIS AGREEMENT, DO NOT INSTALL OR USE THE SOFTWARE.
 
 1. GRANT OF LICENSE
 
-Subject to the terms and conditions of this Agreement, FinOpsysAI grants you a limited, non-exclusive, non-transferable, revocable license to use the Software solely for your internal business purposes.
+Subject to the terms and conditions of this Agreement, FinOpSysAI grants you a limited, non-exclusive, non-transferable, revocable license to use the Software solely for your internal business purposes related to financial data analysis and invoice management.
 
 2. RESTRICTIONS
 
@@ -19,64 +19,110 @@ c) Distribute, sublicense, lease, rent, loan, or otherwise transfer the Software
 d) Remove, alter, or obscure any proprietary notices on the Software
 e) Use the Software for any unlawful purpose or in violation of any applicable laws or regulations
 f) Attempt to circumvent any security measures or access controls implemented in the Software
+g) Use the Software to compete with FinOpSysAI or develop competing products
 
 3. INTELLECTUAL PROPERTY RIGHTS
 
-The Software is protected by copyright laws and international copyright treaties. FinOpsysAI retains all right, title, and interest in and to the Software, including all intellectual property rights therein.
+The Software is protected by copyright laws and international copyright treaties. FinOpSysAI retains all right, title, and interest in and to the Software, including all intellectual property rights therein. This includes but is not limited to:
+a) AI model configurations and prompt engineering
+b) Vector-based feedback system technology
+c) Vendor context isolation mechanisms
+d) Query optimization algorithms
+e) Security and validation frameworks
 
-4. VENDOR CONTEXT SECURITY
+4. VENDOR CONTEXT SECURITY & DATA ISOLATION
 
 The Software implements proprietary vendor context isolation technology. You acknowledge that:
-a) The vendor context management system is confidential and proprietary to FinOpsysAI
+a) The vendor context management system is confidential and proprietary to FinOpSysAI
 b) You will not attempt to bypass or circumvent the vendor isolation mechanisms
 c) You will use the Software only for authorized vendor data access
+d) Data isolation is enforced through technical and procedural controls
+e) Cross-vendor data access is strictly prohibited
 
-5. DATA PROTECTION
+5. DATA PROTECTION & PRIVACY
 
-a) You retain ownership of your data processed through the Software
-b) FinOpsysAI implements technical and organizational measures to protect your data
-c) You are responsible for compliance with applicable data protection laws and regulations
-d) The Software processes data in accordance with the vendor context permissions
+a) You retain ownership of your financial and invoice data processed through the Software
+b) FinOpSysAI implements technical and organizational measures to protect your data in accordance with industry standards
+c) You are responsible for compliance with applicable data protection laws and regulations (GDPR, CCPA, etc.)
+d) The Software processes data in accordance with vendor context permissions and access controls
+e) All data processing is logged for audit and security purposes
+f) No data is shared with unauthorized third parties without explicit consent
 
-6. THIRD-PARTY COMPONENTS
+6. AI & MACHINE LEARNING COMPONENTS
 
-The Software incorporates certain third-party open-source components. Your use of these components is subject to their respective licenses, which are included in the Software distribution.
+The Software incorporates artificial intelligence and machine learning technologies. You acknowledge that:
+a) AI responses are generated based on your data and may require human verification
+b) The feedback system improves AI performance but does not store sensitive business data
+c) Vector embeddings and similarity searches are performed locally within your environment
+d) AI model selections and configurations are proprietary to FinOpSysAI
 
-7. DISCLAIMER OF WARRANTIES
+7. THIRD-PARTY COMPONENTS & INTEGRATIONS
+
+The Software incorporates certain third-party open-source components and integrates with external services:
+a) Your use of third-party components is subject to their respective licenses
+b) External API usage (Google Gemini, OpenAI) is subject to your agreements with those providers
+c) FinOpSysAI is not responsible for third-party service availability or data handling
+d) Database connections (Snowflake) are established using your credentials and permissions
+
+8. DISCLAIMER OF WARRANTIES
 
 THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND. FINOPSYSAI DISCLAIMS ALL WARRANTIES, WHETHER EXPRESS, IMPLIED, OR STATUTORY, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
 
-8. LIMITATION OF LIABILITY
+FINOPSYSAI DOES NOT WARRANT THAT:
+a) The Software will meet your specific requirements or expectations
+b) The operation of the Software will be uninterrupted or error-free
+c) All defects in the Software will be corrected
+d) AI-generated responses will be accurate, complete, or suitable for your purposes
+e) Third-party integrations will remain available or functional
+
+9. LIMITATION OF LIABILITY
 
 IN NO EVENT SHALL FINOPSYSAI BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF PROFITS, DATA, OR USE, ARISING OUT OF OR RELATING TO THIS AGREEMENT OR THE USE OF THE SOFTWARE, REGARDLESS OF THE THEORY OF LIABILITY AND EVEN IF FINOPSYSAI HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
 
-9. INDEMNIFICATION
+FINOPSYSAI'S TOTAL LIABILITY UNDER THIS AGREEMENT SHALL NOT EXCEED THE AMOUNT PAID BY YOU FOR THE SOFTWARE IN THE TWELVE (12) MONTHS PRECEDING THE CLAIM.
 
-You agree to indemnify, defend, and hold harmless FinOpsysAI from and against any claims, damages, losses, costs, and expenses (including reasonable attorneys' fees) arising from your use of the Software or violation of this Agreement.
+10. INDEMNIFICATION
 
-10. TERMINATION
+You agree to indemnify, defend, and hold harmless FinOpSysAI from and against any claims, damages, losses, costs, and expenses (including reasonable attorneys' fees) arising from:
+a) Your use of the Software or violation of this Agreement
+b) Your violation of any applicable laws or regulations
+c) Your data or content processed through the Software
+d) Any breach of your data protection or privacy obligations
 
-This Agreement is effective until terminated. Your license rights will terminate automatically if you fail to comply with any provision of this Agreement. Upon termination, you must cease all use of the Software and destroy all copies in your possession.
+11. TERMINATION
 
-11. EXPORT CONTROL
+This Agreement is effective until terminated. Your license rights will terminate automatically if you fail to comply with any provision of this Agreement. Upon termination:
+a) You must cease all use of the Software immediately
+b) You must destroy all copies of the Software in your possession or control
+c) You must delete all Software-related data and configurations
+d) Surviving provisions (including liability limitations) remain in effect
 
-The Software may be subject to export control laws and regulations. You agree to comply with all applicable export control requirements.
+12. EXPORT CONTROL & COMPLIANCE
 
-12. GOVERNING LAW
+The Software may be subject to export control laws and regulations. You agree to:
+a) Comply with all applicable export control requirements
+b) Not export or re-export the Software to prohibited countries or entities
+c) Obtain necessary licenses for international use
+d) Notify FinOpSysAI of any compliance issues or violations
 
-This Agreement shall be governed by and construed in accordance with the laws of [Jurisdiction], without regard to its conflict of laws principles.
+13. GOVERNING LAW & DISPUTE RESOLUTION
 
-13. ENTIRE AGREEMENT
+This Agreement shall be governed by and construed in accordance with the laws of [Your Jurisdiction], without regard to its conflict of laws principles. Any disputes arising under this Agreement shall be resolved through binding arbitration in accordance with the rules of the American Arbitration Association.
 
-This Agreement constitutes the entire agreement between the parties with respect to the Software and supersedes all prior or contemporaneous understandings regarding such subject matter.
+14. ENTIRE AGREEMENT & MODIFICATIONS
 
-14. CONTACT INFORMATION
+This Agreement constitutes the entire agreement between the parties with respect to the Software and supersedes all prior or contemporaneous understandings regarding such subject matter. This Agreement may only be modified by written consent of both parties.
 
-For questions regarding this license, please contact:
-FinOpsysAI Legal Department
+15. CONTACT INFORMATION
+
+For questions regarding this license, technical support, or legal matters, please contact:
+
+FinOpSysAI Legal & Support Department
 Email: legal@finopsysai.com
+Technical Support: support@finopsysai.com
+Website: https://www.finopsysai.com
 
-BY USING THE SOFTWARE, YOU ACKNOWLEDGE THAT YOU HAVE READ THIS AGREEMENT, UNDERSTAND IT, AND AGREE TO BE BOUND BY ITS TERMS.
+BY USING THE SOFTWARE, YOU ACKNOWLEDGE THAT YOU HAVE READ THIS AGREEMENT, UNDERSTAND IT, AND AGREE TO BE BOUND BY ITS TERMS AND CONDITIONS.
 
-FinOpsysAI
-Copyright © 2025 FinOpsysAI. All Rights Reserved.
+FinOpSysAI - AI-Powered Financial Data Assistant
+Copyright © 2025 FinOpSysAI & Finopsys. All Rights Reserved.
