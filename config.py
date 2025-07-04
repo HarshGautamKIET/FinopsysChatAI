@@ -8,14 +8,14 @@ load_dotenv()
 
 @dataclass
 class Config:
-    """Centralized configuration management with validation"""    # Database
-    SNOWFLAKE_ACCOUNT: str = os.getenv('SNOWFLAKE_ACCOUNT', '')
-    SNOWFLAKE_USER: str = os.getenv('SNOWFLAKE_USER', '')
-    SNOWFLAKE_PASSWORD: Optional[str] = os.getenv('SNOWFLAKE_PASSWORD')
-    SNOWFLAKE_WAREHOUSE: str = os.getenv('SNOWFLAKE_WAREHOUSE', 'FINOPSYS_WH')
-    SNOWFLAKE_DATABASE: str = os.getenv('SNOWFLAKE_DATABASE', 'FINOPSYS_DB')
-    SNOWFLAKE_SCHEMA: str = os.getenv('SNOWFLAKE_SCHEMA', 'PUBLIC')
-    SNOWFLAKE_ROLE: str = os.getenv('SNOWFLAKE_ROLE', 'ACCOUNTADMIN')
+    """Centralized configuration management with validation"""
+    # Database
+    POSTGRES_HOST: str = os.getenv('POSTGRES_HOST', 'localhost')
+    POSTGRES_PORT: int = int(os.getenv('POSTGRES_PORT', '5432'))
+    POSTGRES_USER: str = os.getenv('POSTGRES_USER', 'postgres')
+    POSTGRES_PASSWORD: Optional[str] = os.getenv('POSTGRES_PASSWORD')
+    POSTGRES_DATABASE: str = os.getenv('POSTGRES_DATABASE', 'finopsys_db')
+    POSTGRES_SCHEMA: str = os.getenv('POSTGRES_SCHEMA', 'public')
       # AI Models
     GEMINI_API_KEY: Optional[str] = os.getenv('GEMINI_API_KEY')
     OPENAI_API_KEY: Optional[str] = os.getenv('OPENAI_API_KEY')
@@ -46,12 +46,14 @@ class Config:
     
     def validate_config(self) -> bool:
         """Validate that required configuration is present"""
-        if not self.SNOWFLAKE_ACCOUNT:
-            raise ValueError("SNOWFLAKE_ACCOUNT environment variable is required")
-        if not self.SNOWFLAKE_USER:
-            raise ValueError("SNOWFLAKE_USER environment variable is required")
-        if not self.SNOWFLAKE_PASSWORD:
-            raise ValueError("SNOWFLAKE_PASSWORD environment variable is required")
+        if not self.POSTGRES_HOST:
+            raise ValueError("POSTGRES_HOST environment variable is required")
+        if not self.POSTGRES_USER:
+            raise ValueError("POSTGRES_USER environment variable is required")
+        if not self.POSTGRES_PASSWORD:
+            raise ValueError("POSTGRES_PASSWORD environment variable is required")
+        if not self.POSTGRES_DATABASE:
+            raise ValueError("POSTGRES_DATABASE environment variable is required")
         if self.DEFAULT_PROVIDER == 'gemini' and not self.GEMINI_API_KEY:
             raise ValueError("GEMINI_API_KEY environment variable is required when using Gemini as default provider")
         

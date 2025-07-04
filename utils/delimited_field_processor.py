@@ -9,6 +9,7 @@ import re
 import json
 from typing import List, Dict, Optional, Tuple, Any
 import pandas as pd
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +35,22 @@ class DelimitedFieldProcessor:
         return best_delimiter if delimiter_counts[best_delimiter] > 0 else ','
     
     def parse_delimited_field(self, text: str, delimiter: Optional[str] = None) -> List[str]:
-        """Parse a delimited text field into individual items - supports JSON arrays and CSV"""
-        if not text or not isinstance(text, str):
+        """Parse a delimited text field into individual items - supports JSON arrays, PostgreSQL arrays, and CSV"""
+        if not text:
             return []
+        
+        # Handle PostgreSQL arrays (Python lists) directly
+        if isinstance(text, list):
+            return [str(item).strip() for item in text if item is not None and str(item).strip()]
+        
+        if not isinstance(text, str):
+            return []
+        
+        text = text.strip()
         
         # First, try to parse as JSON array
         try:
-            if text.strip().startswith('[') and text.strip().endswith(']'):
+            if text.startswith('[') and text.endswith(']'):
                 json_data = json.loads(text)
                 if isinstance(json_data, list):
                     # Convert all items to strings and clean them
@@ -55,7 +65,7 @@ class DelimitedFieldProcessor:
         
         # Split by delimiter and clean up each item
         items = [item.strip() for item in text.split(delimiter)]
-          # Remove empty items and clean quotes
+        # Remove empty items and clean quotes
         items = [item.strip('"\'') for item in items if item.strip()]
         
         return items
@@ -146,7 +156,7 @@ class DelimitedFieldProcessor:
         return items
     
     def expand_results_with_items(self, results: Dict[str, Any]) -> Dict[str, Any]:
-        """Expand query results to show individual line items"""
+        """Expand query results to show individual line items with enhanced detection"""
         if not results.get('success') or not results.get('data'):
             return results
         
@@ -160,6 +170,7 @@ class DelimitedFieldProcessor:
         # Convert to DataFrame for easier processing
         df = pd.DataFrame(results['data'], columns=columns)
         expanded_rows = []
+        total_items_detected = 0
         
         for _, row in df.iterrows():
             row_dict = row.to_dict()
@@ -167,9 +178,22 @@ class DelimitedFieldProcessor:
             
             if item_rows:
                 expanded_rows.extend(item_rows)
+                total_items_detected += len(item_rows)
+                logger.debug(f"Expanded 1 invoice into {len(item_rows)} line items")
             else:
-                # Keep original row if no items found
-                expanded_rows.append(row_dict)
+                # Keep original row if no items found, but still process as single item if possible
+                if any(row_dict.get(col) for col in self.item_columns):
+                    # Create a single item row even if parsing failed
+                    single_item = row_dict.copy()
+                    single_item['ITEM_INDEX'] = 1
+                    single_item['ITEM_DESCRIPTION'] = row_dict.get('ITEMS_DESCRIPTION', '')
+                    single_item['ITEM_UNIT_PRICE'] = 0.0
+                    single_item['ITEM_QUANTITY'] = 0.0
+                    single_item['ITEM_LINE_TOTAL'] = 0.0
+                    expanded_rows.append(single_item)
+                    total_items_detected += 1
+                else:
+                    expanded_rows.append(row_dict)
         
         if not expanded_rows:
             return results
@@ -191,12 +215,15 @@ class DelimitedFieldProcessor:
                 data_row.append(row.get(col, ''))
             expanded_data.append(data_row)
         
+        logger.info(f"✅ Successfully expanded {len(results['data'])} invoices into {total_items_detected} individual line items")
+        
         return {
             'success': True,
             'data': expanded_data,
             'columns': new_columns,
             'original_row_count': len(results['data']),
             'expanded_row_count': len(expanded_data),
+            'total_line_items': total_items_detected,
             'items_expanded': True
         }
     
@@ -247,7 +274,7 @@ class DelimitedFieldProcessor:
         # Generate item-focused queries
         queries = [
             f"SELECT CASE_ID, ITEMS_DESCRIPTION, ITEMS_UNIT_PRICE, ITEMS_QUANTITY FROM AI_INVOICE WHERE vendor_id = '{vendor_id}' AND ITEMS_DESCRIPTION IS NOT NULL",
-            f"SELECT CASE_ID, INVOICE_DATE, ITEMS_DESCRIPTION, ITEMS_UNIT_PRICE, ITEMS_QUANTITY FROM AI_INVOICE WHERE vendor_id = '{vendor_id}' ORDER BY INVOICE_DATE DESC LIMIT 10"
+            f"SELECT CASE_ID, BILL_DATE, ITEMS_DESCRIPTION, ITEMS_UNIT_PRICE, ITEMS_QUANTITY FROM AI_INVOICE WHERE vendor_id = '{vendor_id}' ORDER BY BILL_DATE DESC LIMIT 10"
         ]
         
         return queries
@@ -260,7 +287,9 @@ class DelimitedFieldProcessor:
             'item details', 'breakdown', 'line by line', 'itemized', 'what items',
             'what products', 'what services', 'item breakdown', 'product breakdown',
             'service breakdown', 'unit price', 'quantity', 'per item', 'each item',
-            'individual cost', 'line item detail', 'item wise', 'product wise'
+            'individual cost', 'line item detail', 'item wise', 'product wise',
+            'what\'s on the invoice', 'invoice details', 'purchase details',
+            'order details', 'billing details', 'charged for', 'billed for'
         ]
         
         question_lower = user_question.lower()
@@ -271,7 +300,18 @@ class DelimitedFieldProcessor:
         # Check for specific product queries
         has_specific_product_query = self.is_specific_product_query(user_question)
         
-        return has_item_keywords or has_specific_product_query
+        # Check for quantity-related questions that imply items
+        quantity_patterns = [
+            r'how many.*(?:items|products|services)',
+            r'count.*(?:items|products|services)',
+            r'number of.*(?:items|products|services)',
+            r'quantity.*(?:items|products|services)'
+        ]
+        
+        import re
+        has_quantity_query = any(re.search(pattern, question_lower) for pattern in quantity_patterns)
+        
+        return has_item_keywords or has_specific_product_query or has_quantity_query
     
     def format_item_response(self, results: Dict[str, Any], user_question: str) -> str:
         """Format the response for item-level queries in a user-friendly way"""
@@ -309,6 +349,7 @@ class DelimitedFieldProcessor:
         
         return '\n'.join(response_parts)
     
+    @lru_cache(maxsize=256)  # Increased cache size
     def extract_product_names_from_query(self, user_question: str) -> List[str]:
         """Extract potential product/service names from user questions"""
         import re
@@ -406,6 +447,13 @@ class DelimitedFieldProcessor:
     
     def is_specific_product_query(self, user_question: str) -> bool:
         """Determine if user is asking about a specific product/service"""
+        # Use enhanced product extraction
+        extracted_products = self.improve_product_extraction(user_question)
+        if extracted_products:
+            logger.info(f"🎯 Detected specific product query due to enhanced extraction: {extracted_products}")
+            return True
+        
+        # Fallback to original pattern matching
         specific_patterns = [
             r'price of',
             r'cost of', 
@@ -429,10 +477,10 @@ class DelimitedFieldProcessor:
                 logger.info(f"🎯 Detected specific product query pattern: {pattern}")
                 return True
         
-        # Also check if we can extract any product names
-        extracted_products = self.extract_product_names_from_query(user_question)
-        if extracted_products:
-            logger.info(f"🎯 Detected specific product query due to extracted products: {extracted_products}")
+        # Also check if we can extract any product names using original method
+        extracted_products_orig = self.extract_product_names_from_query(user_question)
+        if extracted_products_orig:
+            logger.info(f"🎯 Detected specific product query due to extracted products: {extracted_products_orig}")
             return True
             
         return False
@@ -458,7 +506,7 @@ class DelimitedFieldProcessor:
         sql_query = f"""
         SELECT 
             CASE_ID, 
-            INVOICE_DATE, 
+            BILL_DATE, 
             AMOUNT, 
             BALANCE_AMOUNT,
             ITEMS_DESCRIPTION, 
@@ -468,7 +516,7 @@ class DelimitedFieldProcessor:
         FROM AI_INVOICE 
         WHERE vendor_id = '{vendor_id}' 
         AND ({where_clause})
-        ORDER BY INVOICE_DATE DESC, CASE_ID DESC
+        ORDER BY BILL_DATE DESC, CASE_ID DESC
         LIMIT 100
         """
         
@@ -552,6 +600,324 @@ class DelimitedFieldProcessor:
         response_parts.append(f"\n💡 The table below shows all matching line items.")
         
         return '\n'.join(response_parts)
+    
+    def detect_multiple_items_in_field(self, field_value: str) -> bool:
+        """Detect if a field contains multiple items (JSON array or delimited)"""
+        if not field_value or not isinstance(field_value, str):
+            return False
+        
+        field_value = field_value.strip()
+        
+        # Check for JSON array format
+        if field_value.startswith('[') and field_value.endswith(']'):
+            try:
+                import json
+                parsed = json.loads(field_value)
+                return isinstance(parsed, list) and len(parsed) > 1
+            except:
+                pass
+        
+        # Check for delimited format
+        delimiter = self.detect_delimiter(field_value)
+        items = [item.strip() for item in field_value.split(delimiter) if item.strip()]
+        return len(items) > 1
+    
+    def estimate_total_line_items(self, results: Dict[str, Any]) -> int:
+        """Estimate the total number of line items that would be created after expansion"""
+        if not results.get('success') or not results.get('data'):
+            return 0
+        
+        columns = results.get('columns', [])
+        has_item_columns = any(col in self.item_columns for col in columns)
+        
+        if not has_item_columns:
+            return len(results['data'])
+        
+        try:
+            df = pd.DataFrame(results['data'], columns=columns)
+            total_items = 0
+            
+            for _, row in df.iterrows():
+                row_dict = row.to_dict()
+                
+                # Count items in each relevant field
+                item_counts = []
+                for col in self.item_columns:
+                    if col in row_dict and row_dict[col]:
+                        if col.endswith('_PRICE') or col.endswith('_QUANTITY'):
+                            count = len(self.parse_numeric_delimited_field(str(row_dict[col])))
+                        else:
+                            count = len(self.parse_delimited_field(str(row_dict[col])))
+                        item_counts.append(count)
+                
+                # Take the maximum count as the number of items for this row
+                max_items = max(item_counts) if item_counts else 1
+                total_items += max_items
+            
+            return total_items
+            
+        except Exception as e:
+            logger.warning(f"Error estimating line items: {e}")
+            return len(results['data'])
+    
+    def should_recommend_item_expansion(self, results: Dict[str, Any]) -> tuple[bool, str]:
+        """Determine if item expansion should be recommended with reasoning"""
+        if not results.get('success') or not results.get('data'):
+            return False, "No data available"
+        
+        columns = results.get('columns', [])
+        has_item_columns = any(col in self.item_columns for col in columns)
+        
+        if not has_item_columns:
+            return False, "No item columns present"
+        
+        # Estimate potential line items
+        estimated_items = self.estimate_total_line_items(results)
+        current_rows = len(results['data'])
+        
+        if estimated_items > current_rows:
+            expansion_ratio = estimated_items / current_rows
+            if expansion_ratio >= 2.0:
+                return True, f"Would expand {current_rows} invoices into {estimated_items} line items (expansion ratio: {expansion_ratio:.1f}x)"
+            else:
+                return True, f"Moderate expansion: {current_rows} → {estimated_items} items"
+        
+        return False, "No significant expansion expected"
+    
+    def process_query_results_intelligently(self, results: Dict[str, Any], user_question: str) -> Dict[str, Any]:
+        """Intelligently process query results - expand items if beneficial, otherwise return as-is"""
+        if not results.get('success') or not results.get('data'):
+            return results
+        
+        # Check if expansion would be beneficial
+        should_expand, reason = self.should_recommend_item_expansion(results)
+        
+        # For item-specific queries, always try to expand
+        is_item_query_detected = self.is_item_query(user_question)
+        is_product_query_detected = self.is_specific_product_query(user_question)
+        
+        if should_expand or is_item_query_detected or is_product_query_detected:
+            logger.info(f"🔍 Expanding query results: {reason}")
+            expanded_results = self.expand_results_with_items(results)
+            
+            if expanded_results.get('items_expanded'):
+                # Add metadata about the expansion
+                expanded_results['expansion_reason'] = reason
+                expanded_results['original_query_type'] = 'item_query' if is_item_query_detected else 'general_query'
+                return expanded_results
+            else:
+                logger.info("ℹ️ Expansion attempted but no items were found to expand")
+                return results
+        else:
+            logger.info(f"ℹ️ Not expanding results: {reason}")
+            return results
+    
+    def get_line_items_from_table(self, vendor_id: str, case_id: Optional[str] = None, limit: int = 1000) -> Dict[str, Any]:
+        """Get line items directly from the normalized line items table if it exists"""
+        # This method would be used if the database has been normalized
+        # It's a placeholder for potential future integration with normalized tables
+        logger.info("📋 Direct line items table access not implemented - using expansion method")
+        return {'success': False, 'message': 'Direct table access not available'}
+    
+    def detect_normalized_table_availability(self) -> bool:
+        """Check if the normalized line items table is available"""
+        # This could be enhanced to actually check the database
+        # For now, we'll rely on the expansion method
+        return False
+    
+    def enhance_llm_understanding_for_items(self, user_question: str) -> Dict[str, Any]:
+        """Enhanced method to help LLM understand item-level queries better"""
+        analysis = {
+            'is_item_query': self.is_item_query(user_question),
+            'is_product_query': self.is_specific_product_query(user_question),
+            'extracted_products': self.extract_product_names_from_query(user_question),
+            'query_intent': self.classify_item_query_intent(user_question),
+            'required_columns': self.get_required_columns_for_query(user_question),
+            'sql_hints': self.generate_sql_hints_for_query(user_question)
+        }
+        
+        logger.info(f"🎯 Item query analysis: {analysis}")
+        return analysis
+    
+    def classify_item_query_intent(self, user_question: str) -> str:
+        """Classify the specific intent of item-level queries"""
+        question_lower = user_question.lower()
+        
+        # Specific product lookup
+        if any(pattern in question_lower for pattern in [
+            'price of', 'cost of', 'how much', 'what is the price', 'what is the cost'
+        ]):
+            return 'product_pricing'
+        
+        # Quantity inquiries
+        if any(pattern in question_lower for pattern in [
+            'how many', 'quantity', 'count', 'amount of', 'number of'
+        ]):
+            return 'quantity_inquiry'
+        
+        # Product listing
+        if any(pattern in question_lower for pattern in [
+            'what items', 'what products', 'what services', 'list', 'show me'
+        ]):
+            return 'product_listing'
+        
+        # Cost breakdown
+        if any(pattern in question_lower for pattern in [
+            'breakdown', 'itemized', 'line by line', 'detail'
+        ]):
+            return 'cost_breakdown'
+        
+        # Most expensive/cheapest
+        if any(pattern in question_lower for pattern in [
+            'most expensive', 'cheapest', 'highest', 'lowest', 'maximum', 'minimum'
+        ]):
+            return 'price_analysis'
+        
+        return 'general_item_query'
+    
+    def get_required_columns_for_query(self, user_question: str) -> List[str]:
+        """Determine which columns are required based on the query intent"""
+        base_columns = ['CASE_ID', 'BILL_DATE', 'VENDOR_ID']
+        item_columns = ['ITEMS_DESCRIPTION', 'ITEMS_UNIT_PRICE', 'ITEMS_QUANTITY']
+        
+        intent = self.classify_item_query_intent(user_question)
+        question_lower = user_question.lower()
+        
+        # Always include basic identifiers
+        required_columns = base_columns.copy()
+        
+        # Add item columns based on intent
+        if intent in ['product_pricing', 'product_listing', 'cost_breakdown', 'price_analysis']:
+            required_columns.extend(item_columns)
+        elif intent == 'quantity_inquiry':
+            required_columns.extend(['ITEMS_DESCRIPTION', 'ITEMS_QUANTITY'])
+        elif 'price' in question_lower or 'cost' in question_lower:
+            required_columns.extend(['ITEMS_DESCRIPTION', 'ITEMS_UNIT_PRICE'])
+        elif self.is_item_query(user_question):
+            required_columns.extend(item_columns)
+        
+        # Add financial columns if relevant
+        if any(keyword in question_lower for keyword in ['total', 'amount', 'balance', 'paid']):
+            required_columns.extend(['AMOUNT', 'BALANCE_AMOUNT', 'PAID'])
+        
+        return list(set(required_columns))  # Remove duplicates
+    
+    def generate_sql_hints_for_query(self, user_question: str) -> Dict[str, str]:
+        """Generate specific SQL construction hints for the LLM"""
+        intent = self.classify_item_query_intent(user_question)
+        question_lower = user_question.lower()
+        
+        hints = {
+            'select_hint': '',
+            'where_hint': '',
+            'order_hint': '',
+            'special_hint': ''
+        }
+        
+        # Select clause hints
+        if intent == 'product_pricing':
+            hints['select_hint'] = "SELECT CASE_ID, ITEMS_DESCRIPTION, ITEMS_UNIT_PRICE, ITEMS_QUANTITY"
+        elif intent == 'quantity_inquiry':
+            hints['select_hint'] = "SELECT CASE_ID, ITEMS_DESCRIPTION, ITEMS_QUANTITY"
+        elif intent == 'product_listing':
+            hints['select_hint'] = "SELECT CASE_ID, BILL_DATE, ITEMS_DESCRIPTION, ITEMS_UNIT_PRICE, ITEMS_QUANTITY"
+        elif intent == 'price_analysis':
+            hints['select_hint'] = "SELECT CASE_ID, ITEMS_DESCRIPTION, ITEMS_UNIT_PRICE, ITEMS_QUANTITY"
+            hints['special_hint'] = "Include all ITEMS_* columns for proper price analysis"
+        else:
+            hints['select_hint'] = "SELECT CASE_ID, BILL_DATE, ITEMS_DESCRIPTION, ITEMS_UNIT_PRICE, ITEMS_QUANTITY"
+        
+        # Where clause hints
+        extracted_products = self.extract_product_names_from_query(user_question)
+        if extracted_products:
+            product_conditions = []
+            for product in extracted_products:
+                product_conditions.append(f"LOWER(ITEMS_DESCRIPTION) LIKE LOWER('%{product}%')")
+            hints['where_hint'] = f"AND ({' OR '.join(product_conditions)})"
+        
+        # Order clause hints
+        if any(keyword in question_lower for keyword in ['recent', 'latest', 'newest']):
+            hints['order_hint'] = "ORDER BY BILL_DATE DESC"
+        elif any(keyword in question_lower for keyword in ['oldest', 'first']):
+            hints['order_hint'] = "ORDER BY BILL_DATE ASC"
+        elif intent == 'price_analysis':
+            if 'expensive' in question_lower or 'highest' in question_lower:
+                hints['order_hint'] = "ORDER BY ITEMS_UNIT_PRICE DESC"
+            elif 'cheapest' in question_lower or 'lowest' in question_lower:
+                hints['order_hint'] = "ORDER BY ITEMS_UNIT_PRICE ASC"
+        else:
+            hints['order_hint'] = "ORDER BY BILL_DATE DESC"
+        
+        return hints
+    
+    def create_enhanced_llm_prompt_guidance(self, user_question: str, vendor_id: str) -> str:
+        """Create enhanced guidance specifically for the LLM to understand item queries"""
+        analysis = self.enhance_llm_understanding_for_items(user_question)
+        
+        guidance = f"""
+🎯 ENHANCED ITEM QUERY GUIDANCE:
 
-# Global instance for easy import
+Query Analysis:
+- Intent: {analysis['query_intent']}
+- Is Item Query: {analysis['is_item_query']}
+- Specific Products: {analysis['extracted_products']}
+- Required Columns: {', '.join(analysis['required_columns'])}
+
+SQL Construction Hints:
+- SELECT: {analysis['sql_hints']['select_hint']}
+- WHERE: vendor_id = '{vendor_id}' {analysis['sql_hints']['where_hint']}
+- ORDER: {analysis['sql_hints']['order_hint']}
+- Special: {analysis['sql_hints']['special_hint']}
+
+VIRTUAL ROW SIMULATION:
+Remember: ITEMS_* columns contain JSON arrays. Each array element becomes a separate line item.
+Example: ["Cloud Storage", "Support"] → Two separate rows after backend processing.
+
+YOUR GOAL: Generate SQL that includes the ITEMS_* columns so the backend can create individual line items.
+"""
+        
+        return guidance
+
+    def improve_product_extraction(self, user_question: str) -> List[str]:
+        """Enhanced product extraction with better pattern matching for business items"""
+        import re
+        
+        question_lower = user_question.lower()
+        
+        # Enhanced business/office product patterns
+        business_product_patterns = [
+            r'\b(office\s+chair|desk|table|computer|laptop|monitor|printer|scanner)\b',
+            r'\b(audit\s+report|financial\s+report|consulting|training|software|license)\b',
+            r'\b(cloud\s+storage|hosting|backup|security|support|maintenance)\b',
+            r'\b(furniture|equipment|supplies|materials|services)\b',
+            r'\b([a-zA-Z\s]+(?:chair|desk|report|software|service|equipment|supply))\b',
+            r'(?:show|find|get|what|which).*?([a-zA-Z\s]+(?:chair|desk|report|software))',
+            r'([a-zA-Z\s]+)\s+(?:cost|price|value|total|amount)'
+        ]
+        
+        extracted_products = set()
+        
+        for pattern in business_product_patterns:
+            matches = re.findall(pattern, question_lower, re.IGNORECASE)
+            for match in matches:
+                if isinstance(match, tuple):
+                    product = ' '.join(match).strip()
+                else:
+                    product = match.strip()
+                
+                # Clean and validate the product name
+                product = product.strip()
+                if len(product) >= 3 and product not in ['the', 'and', 'for', 'with', 'from']:
+                    extracted_products.add(product.title())
+        
+        # Also check for quoted products
+        quoted_pattern = r'["\']([^"\']+)["\']'
+        quoted_matches = re.findall(quoted_pattern, user_question)
+        for match in quoted_matches:
+            if len(match.strip()) >= 3:
+                extracted_products.add(match.strip().title())
+        
+        return list(extracted_products)[:5]  # Limit to 5 products
+
+# Create a global instance for easy importing
 delimited_processor = DelimitedFieldProcessor()

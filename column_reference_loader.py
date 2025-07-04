@@ -37,11 +37,11 @@ class ColumnReferenceLoader:
                 }
             },
             'dates': {
-                'columns': ['DUE_DATE', 'BILL_DATE', 'DECLINE_DATE', 'RECEIVING_DATE', 'APPROVEDDATE1', 'APPROVEDDATE2', 'INVOICE_DATE'],
+                'columns': ['DUE_DATE', 'BILL_DATE', 'DECLINE_DATE', 'RECEIVING_DATE', 'APPROVEDDATE1', 'APPROVEDDATE2'],
                 'keywords': {
                     'DUE_DATE': ['due date', 'payment deadline', 'when to pay'],
                     'BILL_DATE': ['bill date', 'billing date', 'when billed'],
-                    'INVOICE_DATE': ['invoice date', 'date created', 'issued on']
+                    'BILL_DATE': ['invoice date', 'date created', 'issued on', 'bill date', 'date of invoice']
                 }
             },
             'financial': {
@@ -89,6 +89,7 @@ DATABASE CONTEXT:
 - Database: FINOPSYS_DB
 - Schema: PUBLIC  
 - Table: AI_INVOICE
+- Database Type: PostgreSQL
 
 COLUMN MAPPING GUIDE:
 Core Identifiers: {', '.join(self.column_mappings['identifiers']['columns'])}
@@ -112,7 +113,7 @@ CRITICAL SECURITY REQUIREMENTS:
 1. MANDATORY: ALWAYS include WHERE vendor_id = '{vendor_id}' in EVERY query
 2. ONLY query the AI_INVOICE table
 3. Generate ONLY the SQL query, no explanations
-4. Use Snowflake SQL syntax
+4. Use PostgreSQL SQL syntax
 5. Map user keywords to correct column names using the guide above
 
 Current vendor context: vendor_id = {vendor_id}"""

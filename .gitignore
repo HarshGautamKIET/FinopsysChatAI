@@ -92,3 +92,6 @@ feedback_data/
 # Temporary files
 *.tmp
 *.temp
+
+# YoYo AI version control directory
+.yoyo/

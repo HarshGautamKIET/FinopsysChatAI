@@ -240,68 +240,87 @@ class ColumnKeywordsMapping:
                 'category': 'financial',
                 'description': 'Invoice amount before taxes and additional charges'
             },
-              # 🔹 Invoice Content (Delimited Fields Support)
+              # 🔹 Item/Product Content (JSON Arrays & Delimited Data)
             'ITEMS_DESCRIPTION': {
                 'keywords': [
-                    'item description', 'billed items', 'services listed', 'product summary', 'what was billed',
-                    'invoice items', 'line item detail', 'service/product detail', 'work done', 'what included',
-                    'products', 'services', 'line items', 'individual items', 'item breakdown',
-                    'product list', 'service list', 'what did I buy', 'what was purchased', 'purchased items',
-                    'itemized list', 'detailed breakdown', 'line by line', 'item details', 'product details',
-                    'service details', 'what services', 'what products', 'items bought', 'goods purchased',
-                    'deliverables', 'offerings', 'merchandise', 'inventory', 'catalog items', 'order items',
-                    'purchased goods', 'billed services', 'work performed', 'tasks completed', 'services rendered',
-                    'product names', 'service names', 'item names', 'description list', 'product catalog',
-                    'service catalog', 'item catalog', 'goods description', 'service description',
-                    # Technology/Cloud Services
-                    'cloud storage', 'cloud', 'storage', 'support', 'license', 'training', 'software',
-                    'consulting', 'hosting', 'backup', 'security', 'email', 'database', 'web hosting',
-                    'mobile app', 'data backup', 'ssl certificate', 'domain', 'server', 'subscription',
-                    'maintenance', 'premium', 'professional', 'enterprise', 'standard', 'basic',
-                    'SaaS', 'platform', 'infrastructure', 'monitoring', 'analytics', 'API', 'CDN',
-                    'bandwidth', 'computing', 'virtual machine', 'instance', 'container', 'kubernetes',
-                    # Additional common service types
-                    'development', 'design', 'marketing', 'advertising', 'management', 'administration',
-                    'integration', 'implementation', 'migration', 'deployment', 'configuration', 'setup',
-                    'customization', 'optimization', 'performance', 'scalability', 'reliability',
-                    'availability', 'disaster recovery', 'business continuity', 'compliance', 'audit'
+                    'items', 'products', 'services', 'item description', 'product description',
+                    'what items', 'what products', 'what services', 'item list', 'product list',
+                    'service list', 'billed items', 'purchased items', 'ordered items',
+                    'line items', 'line item description', 'individual items', 'specific items',
+                    'item details', 'product details', 'service details', 'item breakdown',
+                    'product breakdown', 'service breakdown', 'itemized', 'itemized list',
+                    'what did I buy', 'what was billed', 'what was purchased', 'what was ordered',
+                    'item names', 'product names', 'service names', 'items included',
+                    'products included', 'services included', 'billing items', 'billing products',
+                    'charged items', 'charged products', 'billed services', 'item wise',
+                    'product wise', 'service wise', 'item catalog', 'product catalog',
+                    'service catalog', 'item inventory', 'product inventory', 'items sold',
+                    'products sold', 'services provided', 'deliverables', 'line item details',
+                    'invoice items', 'invoice products', 'invoice services', 'bill items',
+                    'bill products', 'bill services', 'purchase items', 'purchase products',
+                    'purchase services', 'order items', 'order products', 'order services',
+                    'cloud storage', 'hosting', 'software', 'license', 'support', 'consulting',
+                    'training', 'backup', 'security', 'maintenance', 'subscription', 'renewal',
+                    'domain', 'ssl', 'certificate', 'database', 'email', 'mobile app', 'web app',
+                    'development', 'design', 'integration', 'api', 'storage space', 'bandwidth',
+                    'server', 'vm', 'virtual machine', 'container', 'kubernetes'
                 ],
                 'category': 'content',
-                'description': 'Description of items or services billed (supports JSON arrays and CSV formats)'
+                'description': 'JSON array or delimited list of product/service names and descriptions',
+                'data_format': 'JSON Array or CSV: ["Cloud Storage", "Email Service", "Support"] or "Cloud Storage, Email Service, Support"',
+                'virtual_expansion': 'Each array element becomes an individual line item row'
             },
             
             'ITEMS_UNIT_PRICE': {
                 'keywords': [
-                    'unit price', 'price per item', 'rate', 'price per unit', 'cost per piece',
-                    'per unit rate', 'item rate', 'line item price', 'cost per item', 'service rate',
-                    'individual price', 'item cost', 'unit cost', 'pricing', 'rates', 'price each',
-                    'price breakdown', 'cost breakdown', 'unit pricing', 'item pricing', 'per piece cost',
-                    'single unit price', 'cost each', 'rate per unit', 'individual cost', 'per item cost',
-                    'hourly rate', 'daily rate', 'monthly rate', 'annual rate', 'subscription rate',
-                    'license cost', 'per license price', 'seat cost', 'user cost', 'per user price',
-                    'service price', 'product price', 'unit charge', 'individual charge', 'per unit charge',
-                    'cost per service', 'price per service', 'rate card', 'tariff', 'fee structure',
-                    'pricing model', 'cost model', 'charge rate', 'billing rate', 'standard rate'
+                    'unit price', 'price per item', 'item price', 'individual price', 'piece price',
+                    'rate', 'cost per item', 'cost per piece', 'per unit cost', 'unit cost',
+                    'price each', 'cost each', 'individual cost', 'item cost', 'product price',
+                    'service price', 'line item price', 'price breakdown', 'cost breakdown',
+                    'item rate', 'product rate', 'service rate', 'hourly rate', 'daily rate',
+                    'monthly rate', 'annual rate', 'subscription price', 'license price',
+                    'rental price', 'lease price', 'unit pricing', 'pricing per unit',
+                    'price per piece', 'cost per unit', 'per item pricing', 'individual pricing',
+                    'item pricing', 'product pricing', 'service pricing', 'line pricing',
+                    'price list', 'rate card', 'pricing structure', 'cost structure',
+                    'billing rate', 'charge rate', 'fee per item', 'fee per unit',
+                    'price per service', 'cost per service', 'service fee', 'item fee',
+                    'product fee', 'unit fee', 'piece rate', 'per piece rate', 'rate per item',
+                    'rate per unit', 'charge per item', 'charge per unit', 'price schedule',
+                    'rate schedule', 'unit value', 'item value', 'individual value'
                 ],
                 'category': 'content',
-                'description': 'Price per unit of each item or service (supports multiple prices separated by delimiters)'
+                'description': 'JSON array or delimited list of unit prices for each item',
+                'data_format': 'JSON Array or CSV: [99.99, 150.00, 250.00] or "99.99, 150.00, 250.00"',
+                'virtual_expansion': 'Each array element corresponds to the price of an individual line item'
             },
             
             'ITEMS_QUANTITY': {
                 'keywords': [
-                    'quantity', 'item count', 'units billed', 'how many items', 'product count',
-                    'total units', 'service quantity', 'number of units', 'billed units', 'invoice quantity',
-                    'quantities', 'amounts', 'volumes', 'counts', 'numbers', 'how many',
-                    'quantity breakdown', 'unit breakdown', 'item counts', 'how much', 'volume billed',
-                    'units ordered', 'units delivered', 'units purchased', 'units provided', 'units consumed',
-                    'usage quantity', 'consumption', 'utilization', 'hours worked', 'hours billed',
-                    'days billed', 'months billed', 'licenses', 'seats', 'users', 'instances',
-                    'GB used', 'TB used', 'MB used', 'bandwidth used', 'storage used', 'compute hours',
-                    'transaction count', 'API calls', 'requests', 'operations', 'executions',
-                    'number purchased', 'amount used', 'total consumed', 'aggregate quantity'
+                    'quantity', 'qty', 'amount', 'count', 'number', 'how many', 'how much',
+                    'item quantity', 'product quantity', 'service quantity', 'line quantity',
+                    'ordered quantity', 'purchased quantity', 'billed quantity', 'sold quantity',
+                    'delivered quantity', 'shipped quantity', 'received quantity', 'units',
+                    'pieces', 'items count', 'products count', 'services count', 'volume',
+                    'item count', 'product count', 'service count', 'line item count',
+                    'total quantity', 'total count', 'total units', 'total pieces',
+                    'quantity ordered', 'quantity purchased', 'quantity billed', 'quantity sold',
+                    'quantity delivered', 'quantity shipped', 'quantity received', 'units ordered',
+                    'units purchased', 'units billed', 'units sold', 'units delivered',
+                    'units shipped', 'units received', 'pieces ordered', 'pieces purchased',
+                    'pieces billed', 'pieces sold', 'pieces delivered', 'pieces shipped',
+                    'pieces received', 'number of items', 'number of products', 'number of services',
+                    'number of units', 'number of pieces', 'quantity breakdown', 'count breakdown',
+                    'units breakdown', 'pieces breakdown', 'item volume', 'product volume',
+                    'service volume', 'line volume', 'order volume', 'purchase volume',
+                    'billing volume', 'sales volume', 'delivery volume', 'shipment volume',
+                    'receipt volume', 'usage', 'usage quantity', 'consumption', 'allocation',
+                    'subscription count', 'license count', 'user count', 'seat count'
                 ],
-                'category': 'content',
-                'description': 'Quantity of items or units of service provided (supports multiple quantities separated by delimiters)'
+                'category': 'content', 
+                'description': 'JSON array or delimited list of quantities for each item',
+                'data_format': 'JSON Array or CSV: [5, 2, 1] or "5, 2, 1"',
+                'virtual_expansion': 'Each array element corresponds to the quantity of an individual line item'
             },
             
             # 🔹 Status and Processing
@@ -429,19 +448,42 @@ COMPREHENSIVE COLUMN MAPPING GUIDE:
         
         context += f"""
 
-DELIMITED FIELDS SUPPORT:
-The following columns contain multiple items separated by delimiters (comma, semicolon, etc.):
-• ITEMS_DESCRIPTION: Multiple product/service names
-• ITEMS_UNIT_PRICE: Multiple prices (one per item)  
-• ITEMS_QUANTITY: Multiple quantities (one per item)
+🎯 MULTI-ITEM DATA STRUCTURE & VIRTUAL ROW CONCEPT:
 
-For item-level queries, include these columns to get detailed breakdowns.
+CRITICAL UNDERSTANDING - JSON ARRAY FIELDS:
+• ITEMS_DESCRIPTION: ["Cloud Storage", "Email Service", "Support"]
+• ITEMS_UNIT_PRICE: [99.99, 150.00, 250.00]  
+• ITEMS_QUANTITY: [5, 2, 1]
+
+VIRTUAL TRANSFORMATION CONCEPT:
+When the LLM includes these columns in queries, the backend automatically transforms them:
+┌─────────────────┬─────────────┬──────────┬─────────────────┐
+│ INVOICE (Raw)   │             │          │                 │
+└─────────────────┴─────────────┴──────────┴─────────────────┘
+         ↓ BACKEND EXPANSION ↓
+┌─────────────────┬─────────────┬──────────┬─────────────────┐
+│ ITEM_DESCRIPTION│ UNIT_PRICE  │ QUANTITY │ LINE_TOTAL      │
+├─────────────────┼─────────────┼──────────┼─────────────────┤
+│ Cloud Storage   │ 99.99       │ 5        │ 499.95          │
+│ Email Service   │ 150.00      │ 2        │ 300.00          │
+│ Support         │ 250.00      │ 1        │ 250.00          │
+└─────────────────┴─────────────┴──────────┴─────────────────┘
+
+QUERY STRATEGY FOR ITEM-LEVEL QUESTIONS:
+1. When users ask about "items", "products", "services": Include ITEMS_* columns
+2. The backend will automatically parse JSON arrays and create individual line items
+3. Users will see each array element as a separate row
+4. Perfect for answering: "What items did I buy?", "Show me line item details"
+
+SEARCH STRATEGY FOR SPECIFIC PRODUCTS:
+- Use: WHERE LOWER(ITEMS_DESCRIPTION) LIKE LOWER('%product_name%')
+- This searches within JSON arrays and CSV data effectively
 
 CRITICAL SECURITY REQUIREMENTS:
 1. MANDATORY: ALWAYS include WHERE vendor_id = '{vendor_id}' in EVERY query
 2. ONLY query the AI_INVOICE table
 3. Generate ONLY the SQL query, no explanations
-4. Use Snowflake SQL syntax
+4. Use PostgreSQL SQL syntax
 5. Map user keywords to correct column names using the guide above
 
 KEYWORD MAPPING EXAMPLES:
@@ -458,7 +500,7 @@ KEYWORD MAPPING EXAMPLES:
 PRODUCT-SPECIFIC QUERY GUIDANCE:
 - For questions about specific products/services, always include ITEMS_DESCRIPTION, ITEMS_UNIT_PRICE, ITEMS_QUANTITY
 - Use LIKE clauses to search within JSON arrays and CSV data: LOWER(ITEMS_DESCRIPTION) LIKE '%product_name%'
-- Include ORDER BY INVOICE_DATE DESC for recent data first
+- Include ORDER BY BILL_DATE DESC for recent data first
 - Add LIMIT 100 for performance on large datasets
 
 Current vendor context: vendor_id = {vendor_id}"""

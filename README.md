@@ -1,6 +1,59 @@
 # 💼 FinOpSysAI
 
-**FinOpSysAI** is Finopsys' AI-powered financial data assistant designed to help you analyze invoice data through natural language queries. This secure, production-ready application provides vendor-specific database access with intelligent AI-powered analysis.
+**FinOpSysAI** is Finopsys' AI-powered financial data assistant designed to help you analyze invoice data through natural language queries. ## 📦 Advanced Item Processing Features
+
+The application intelligently handles invoice line items stored as JSON arrays or structured strings within single database fields, enabling sophisticated item-level analysis.
+
+### Virtual Row Expansion Technology
+
+**Data Structure (Current):**
+Product line items are stored as aligned JSON arrays in these columns:
+- `ITEMS_DESCRIPTION` → e.g., `["Cable", "Connector", "Software"]`
+- `ITEMS_UNIT_PRICE` → e.g., `[150, 75, 250]`
+- `ITEMS_QUANTITY` → e.g., `[10, 5, 1]`
+
+**Virtual Transformation:**
+The system automatically transforms each array element into individual rows:
+```
+| ITEM_NAME  | UNIT_PRICE | QUANTITY | LINE_TOTAL |
+|------------|------------|----------|------------|
+| Cable      | 150        | 10       | 1500.00    |
+| Connector  | 75         | 5        | 375.00     |
+| Software   | 250        | 1        | 250.00     |
+```
+
+### LLM-Powered Query Understanding
+
+**Intelligent Detection:**
+- Automatically detects item-level queries like "What is the most expensive item?"
+- Recognizes product-specific searches like "Show me cloud storage costs"
+- Identifies quantity-related questions like "List items with quantity > 5"
+
+**Query Examples That Trigger Virtual Expansion:**
+- "What items did I purchase?"
+- "Show me the most expensive item in invoice X"
+- "List all items with quantity > 5"
+- "What's the price of cloud storage?"
+- "Show me item names in my last invoice"
+- "Break down my invoice by individual products"
+
+### Supported Data Formats
+- **JSON Arrays**: `["Cloud Storage", "Support"]` or `[99.99, 150.00]`
+- **CSV Format**: `"Cloud Storage,Support"` or `"99.99,150.00"`
+- **Mixed Formats**: The system handles both formats within the same dataset
+
+### Automatic Processing Features
+- **Smart Detection**: Identifies item columns (`ITEMS_DESCRIPTION`, `ITEMS_UNIT_PRICE`, `ITEMS_QUANTITY`)
+- **Format Agnostic**: Parses both JSON arrays and CSV-delimited strings seamlessly
+- **Virtual Expansion**: Converts multi-item invoices into individual line item rows
+- **Statistical Analysis**: Provides item-level statistics, totals, and insights
+- **Product Search**: Enables searching for specific products across all invoices
+
+### Enhanced User Experience
+- **Automatic Expansion**: No manual intervention required - the system detects when to expand
+- **Clear Messaging**: Users are informed when virtual expansion occurs
+- **Rich Analytics**: Item statistics, common products, and pricing insights
+- **Performance Optimized**: Efficient processing even with large datasetstion-ready application provides vendor-specific database access with intelligent AI-powered analysis.
 
 ## ✨ Core Features
 

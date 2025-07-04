@@ -38,7 +38,7 @@ class SystemValidator:
         
         required_packages = [
             'streamlit',
-            'snowflake.connector',
+            'psycopg2',
             'pandas',
             'pydantic',
             ('dotenv', 'python-dotenv')  # Special case: module name differs from package name
@@ -102,11 +102,10 @@ class SystemValidator:
             return
         
         required_vars = [
-            'SNOWFLAKE_ACCOUNT',
-            'SNOWFLAKE_USER',
-            'SNOWFLAKE_PASSWORD',
-            'SNOWFLAKE_WAREHOUSE',
-            'SNOWFLAKE_DATABASE',
+            'POSTGRES_HOST',
+            'POSTGRES_USER',
+            'POSTGRES_PASSWORD',
+            'POSTGRES_DATABASE',
             'GEMINI_API_KEY',
             'DEFAULT_PROVIDER',
             'DEFAULT_MODEL'

@@ -13,7 +13,7 @@ Features:
 
 import streamlit as st
 import logging
-import snowflake.connector
+import psycopg2
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
@@ -38,6 +38,7 @@ from utils.query_validator import QueryValidator
 from utils.error_handler import error_handler, AppError
 from utils.query_optimizer import QueryOptimizer
 from utils.delimited_field_processor import delimited_processor
+from utils.enhanced_db_manager import EnhancedDatabaseManager
 from column_reference_loader import ColumnReferenceLoader
 from llm_response_restrictions import response_restrictions
 from column_keywords_mapping import column_keywords
@@ -52,14 +53,13 @@ logger = logging.getLogger(__name__)
 
 # Use environment variables
 config = Config()
-SNOWFLAKE_CONFIG = {
-    'account': config.SNOWFLAKE_ACCOUNT,
-    'user': config.SNOWFLAKE_USER,
-    'password': config.SNOWFLAKE_PASSWORD or os.getenv('SNOWFLAKE_PASSWORD'),
-    'warehouse': config.SNOWFLAKE_WAREHOUSE,
-    'database': config.SNOWFLAKE_DATABASE,
-    'schema': config.SNOWFLAKE_SCHEMA,
-    'role': config.SNOWFLAKE_ROLE
+POSTGRES_CONFIG = {
+    'host': config.POSTGRES_HOST,
+    'port': config.POSTGRES_PORT,
+    'user': config.POSTGRES_USER,
+    'password': config.POSTGRES_PASSWORD or os.getenv('POSTGRES_PASSWORD'),
+    'database': config.POSTGRES_DATABASE,
+    'options': f'-c search_path={config.POSTGRES_SCHEMA}'
 }
 
 # Use configuration for API keys
@@ -313,8 +313,8 @@ class LLMManager:
             
         return f"❌ Error: Unable to generate response. All providers failed."
 
-class SnowflakeManager:
-    """Enhanced Snowflake manager with connection pooling and security"""
+class PostgreSQLManager:
+    """Enhanced PostgreSQL manager with connection pooling and security"""
     
     def __init__(self):
         self.connection = None
@@ -323,12 +323,12 @@ class SnowflakeManager:
         self.connection_validated = False
         
     def connect(self) -> bool:
-        """Establish Snowflake connection with validation"""
+        """Establish PostgreSQL connection with validation"""
         try:
             # Validate configuration first
             config.validate_config()
             
-            self.connection = snowflake.connector.connect(**SNOWFLAKE_CONFIG)
+            self.connection = psycopg2.connect(**POSTGRES_CONFIG)
             
             # Test connection with a simple query
             cursor = self.connection.cursor()
@@ -338,17 +338,17 @@ class SnowflakeManager:
             
             if result and result[0] == 1:
                 self.connection_validated = True
-                logger.info("✅ Snowflake connection established and validated")
+                logger.info("✅ PostgreSQL connection established and validated")
                 return True
             else:
-                logger.error("❌ Snowflake connection test failed")
+                logger.error("❌ PostgreSQL connection test failed")
                 return False
                 
         except ValueError as e:
             logger.error(f"❌ Configuration error: {str(e)}")
             return False
         except Exception as e:
-            logger.error(f"❌ Snowflake connection failed: {str(e)}")
+            logger.error(f"❌ PostgreSQL connection failed: {str(e)}")
             return False
     
     def get_available_cases(self) -> list:
@@ -427,7 +427,8 @@ class SnowflakeManager:
             
             return result
         except Exception as e:
-            raise AppError("Query execution failed", str(e))@staticmethod
+            raise AppError("Query execution failed", str(e))
+    
     @st.cache_data(ttl=300)  # Cache for 5 minutes
     def get_cached_query_result(query_hash: str, query: str):
         """Cache frequently used queries"""
@@ -467,7 +468,8 @@ class ContextAwareChat:
     """Main chat application with context management"""
     def __init__(self):
         self.llm_manager = LLMManager()
-        self.db_manager = SnowflakeManager()
+        self.db_manager = PostgreSQLManager()
+        self.enhanced_db_manager = EnhancedDatabaseManager(self.db_manager)
         self.delimited_processor = delimited_processor
         self.initialized = False
         
@@ -479,69 +481,30 @@ class ContextAwareChat:
         return self.initialized
     
     def generate_sql_query(self, user_question: str) -> str:
-        """Generate SQL query with vendor context and delimited field awareness"""
+        """Generate SQL query with enhanced item-aware LLM guidance"""
         if not self.db_manager.vendor_id:
             return "❌ Error: No vendor context established."
         
-        # Use the enhanced delimited processor to check for item queries
-        is_item_query = self.delimited_processor.is_item_query(user_question)
+        # 🔹 NEW: Get enhanced LLM guidance for item-level queries
+        enhanced_guidance = self.delimited_processor.create_enhanced_llm_prompt_guidance(
+            user_question, self.db_manager.vendor_id
+        )
         
-        # Check for specific product queries
-        is_specific_product_query = self.delimited_processor.is_specific_product_query(user_question)
-        extracted_products = self.delimited_processor.extract_product_names_from_query(user_question)
-        
-        # If this is a specific product query, generate targeted SQL
-        if is_specific_product_query and extracted_products:
-            sql_query = self.delimited_processor.generate_product_specific_sql(
-                user_question, self.db_manager.vendor_id, extracted_products
-            )
-            if sql_query:
-                logger.info(f"🔍 Generated product-specific SQL: {sql_query}")
-                return sql_query
-        
-        # Get enhanced prompt context with comprehensive column mappings
-        enhanced_context = self.llm_manager.column_keywords.get_enhanced_prompt_context(
+        # Get base context from column keywords
+        base_context = self.llm_manager.column_keywords.get_enhanced_prompt_context(
             self.db_manager.vendor_id, 
             self.db_manager.case_id
         )
         
-        # Add specific guidance for item queries
-        if is_item_query or is_specific_product_query:
-            enhanced_context += f"""
-
-ITEM-LEVEL QUERY DETECTED:
-For questions about items, products, or services, ALWAYS include these columns:
-- ITEMS_DESCRIPTION (contains product/service names in JSON arrays)
-- ITEMS_UNIT_PRICE (contains prices per item in JSON arrays)
-- ITEMS_QUANTITY (contains quantities per item in JSON arrays)
-
-IMPORTANT: These columns contain JSON arrays like ["Cloud Storage", "Support"] and [99.99, 150.00].
-For specific product searches, use LIKE operators: WHERE LOWER(ITEMS_DESCRIPTION) LIKE LOWER('%product_name%')
-
-Example for item queries:
-SELECT CASE_ID, INVOICE_DATE, ITEMS_DESCRIPTION, ITEMS_UNIT_PRICE, ITEMS_QUANTITY 
-FROM AI_INVOICE WHERE vendor_id = '{self.db_manager.vendor_id}'
-ORDER BY INVOICE_DATE DESC"""
+        # Combine contexts for comprehensive LLM understanding
+        combined_prompt = f"{base_context}\n\n{enhanced_guidance}"
         
-        prompt = f"""{enhanced_context}
-
-USER QUESTION: {user_question}
-
-Generate ONLY a valid SQL query for Snowflake database. Follow these strict requirements:
-1. ALWAYS include: WHERE vendor_id = '{self.db_manager.vendor_id}'
-2. Use ONLY the AI_INVOICE table
-3. Return ONLY the SQL query - no explanations, no markdown, no extra text
-4. Map user keywords to correct column names using the comprehensive guide above
-5. For item-related queries, include ITEMS_* columns for detailed breakdowns
-6. For specific product searches, use LIKE operators on ITEMS_DESCRIPTION
-
-SQL QUERY:"""
-        
-        sql_query = self.llm_manager.generate_response(prompt)
+        # Generate the SQL query using enhanced LLM guidance
+        sql_query = self.llm_manager.generate_response(combined_prompt)
         
         # Clean up the response to extract just the SQL
         sql_query = sql_query.strip()
-          # Remove common prefixes/suffixes that LLMs might add
+        # Remove common prefixes/suffixes that LLMs might add
         for prefix in ["```sql", "```", "SQL:", "Query:", "Answer:"]:
             if sql_query.upper().startswith(prefix.upper()):
                 sql_query = sql_query[len(prefix):].strip()
@@ -557,7 +520,7 @@ SQL QUERY:"""
             else:
                 sql_query += f" WHERE vendor_id = '{self.db_manager.vendor_id}'"
         
-        logger.info(f"🔍 Generated SQL: {sql_query}")
+        logger.info(f"🔍 Generated enhanced SQL: {sql_query}")
         return sql_query
     
     def process_user_query(self, user_question: str) -> str:
@@ -569,34 +532,29 @@ SQL QUERY:"""
             return "❌ No vendor context established. Please select a case ID first."
         
         try:
-            # Check if this is an item-level query and if it's asking about specific products
-            is_item_query = self.delimited_processor.is_item_query(user_question)
-            is_specific_product_query = self.delimited_processor.is_specific_product_query(user_question)
-            extracted_products = self.delimited_processor.extract_product_names_from_query(user_question)
+            # Get comprehensive query analysis once (avoid redundant calls)
+            query_analysis = self.delimited_processor.enhance_llm_understanding_for_items(user_question)
+            is_item_query = query_analysis['is_item_query']
+            is_specific_product_query = query_analysis['is_product_query']
+            extracted_products = query_analysis['extracted_products']
+            
+            logger.info(f"🎯 Query analysis completed: Intent={query_analysis['query_intent']}, Item Query={is_item_query}, Product Query={is_specific_product_query}")
             
             # Generate SQL query (enhanced for item detection and specific products)
             sql_query = self.generate_sql_query(user_question)
             
-            # Execute query with vendor filtering
-            result = self.db_manager.execute_vendor_query(sql_query)
+            # 🔹 NEW: Use enhanced database manager for intelligent query execution with cached analysis
+            processed_result = self.enhanced_db_manager.execute_item_aware_query_with_analysis(sql_query, user_question, query_analysis)
             
-            # Store the result for display purposes
-            self.db_manager.last_query_result = result
+            # Store the processed result for display purposes
+            self.db_manager.last_query_result = processed_result
             
-            # Always attempt item expansion for item queries or when item columns are present
-            processed_result = result
-            if result.get("success"):
-                # Check if result has item columns
-                has_item_columns = any(col in ['ITEMS_DESCRIPTION', 'ITEMS_UNIT_PRICE', 'ITEMS_QUANTITY'] 
-                                     for col in result.get("columns", []))
-                
-                if is_item_query or has_item_columns:
-                    # Attempt to expand items - this will auto-detect JSON arrays and CSV
-                    expanded_result = self.delimited_processor.expand_results_with_items(result)
-                    if expanded_result.get('items_expanded'):
-                        processed_result = expanded_result
-                        self.db_manager.last_query_result = processed_result
-                        logger.info(f"✅ Auto-expanded {result.get('data', []).__len__()} invoices to {expanded_result.get('expanded_row_count', 0)} line items")
+            # Log expansion information
+            if processed_result.get('items_expanded'):
+                original_count = processed_result.get('original_row_count', 0)
+                expanded_count = processed_result.get('expanded_row_count', 0)
+                items_count = processed_result.get('total_line_items', expanded_count)
+                logger.info(f"✅ Query results automatically expanded: {original_count} invoices → {items_count} line items")
             
             # Create safe context for LLM response
             safe_context = response_restrictions.create_safe_context_prompt(self.db_manager.vendor_id)
@@ -618,7 +576,7 @@ SQL QUERY:"""
             Remember: Never include specific ID values, case numbers, or vendor codes in your response.
             Focus on the data insights while maintaining privacy and security.
             
-            {"ITEM-LEVEL ANALYSIS: This query involves individual items/products. The data has been automatically expanded to show individual line items. Provide insights about item-level details, quantities, pricing, and totals. Focus on product/service analysis." if processed_result.get('items_expanded') else ""}
+            {"ITEM-LEVEL ANALYSIS: This query involves individual items/products. The data has been automatically expanded to show individual line items with " + str(processed_result.get('total_line_items', 0)) + " total items. Provide insights about item-level details, quantities, pricing, and totals. Focus on product/service analysis." if processed_result.get('items_expanded') else ""}
             """
             final_response = self.llm_manager.generate_response(response_prompt)
             
@@ -656,49 +614,63 @@ SQL QUERY:"""
 
 # Utility Functions for Streamlit UI
 def display_results(results: dict):
-    """Display results with intelligent item processing"""
+    """Display results with intelligent item processing and enhanced information"""
     if not results.get("success") or not results.get("data"):
-        st.error("No data to display")
+        st.warning("No data returned for this query.")
         return
     
-    # Check if results contain delimited item fields
-    has_item_columns = any(col in ['ITEMS_DESCRIPTION', 'ITEMS_UNIT_PRICE', 'ITEMS_QUANTITY'] 
-                          for col in results.get("columns", []))
-    
-    original_results = results
-    display_expanded = False
-    
-    if has_item_columns:
-        st.info("📦 This query contains invoice line items with detailed product/service information.")
+    # Check if results were expanded for item-level analysis
+    if results.get('items_expanded'):
+        original_count = results.get('original_row_count', 0)
+        expanded_count = results.get('expanded_row_count', 0)
+        total_items = results.get('total_line_items', expanded_count)
         
-        # Automatically check if data should be expanded based on content
-        df_temp = pd.DataFrame(results["data"], columns=results["columns"])
-        should_auto_expand = False
+        st.info(f"""
+        **✨ Virtual Row Expansion Activated**
         
-        # Check if any item field contains JSON arrays or multiple items
-        for col in ['ITEMS_DESCRIPTION', 'ITEMS_UNIT_PRICE', 'ITEMS_QUANTITY']:
-            if col in df_temp.columns:
-                sample_values = df_temp[col].dropna().head(5)
-                for val in sample_values:
-                    if isinstance(val, str):
-                        # Check for JSON array format
-                        if (val.strip().startswith('[') and val.strip().endswith(']')) or ',' in val:
-                            should_auto_expand = True
-                            break
-                if should_auto_expand:
-                    break
+        Your query involved individual products/services. To provide detailed insights, the JSON arrays have been automatically parsed and expanded:
         
-        # Automatically expand if multiple items detected
-        if should_auto_expand:
-            st.success("🔍 **Auto-expanded**: Detected multiple items per invoice - showing individual line items")
-            results = delimited_processor.expand_results_with_items(results)
-            display_expanded = True
+        - **{original_count}** invoices analyzed
+        - **{total_items}** individual line items created
+        - Each row below represents one product/service line item
+        
+        💡 This virtual expansion allows for item-specific analysis like "most expensive item" or "items with quantity > 5"
+        """)
+        
+        # Show item statistics if available
+        item_stats = delimited_processor.get_item_statistics(results)
+        if item_stats:
+            col1, col2, col3, col4 = st.columns(4)
             
-            if results.get('items_expanded'):
-                # Show item statistics
-                item_response = delimited_processor.format_item_response(original_results, "")
-                if item_response and item_response != "No detailed item information found in the query results.":
-                    st.markdown(item_response)
+            with col1:
+                st.metric("Total Line Items", f"{item_stats.get('total_line_items', 0):,}")
+            
+            with col2:
+                st.metric("Unique Invoices", f"{item_stats.get('unique_invoices', 0):,}")
+            
+            with col3:
+                total_value = item_stats.get('total_item_value', 0)
+                st.metric("Total Item Value", f"${total_value:,.2f}" if total_value > 0 else "N/A")
+            
+            with col4:
+                avg_price = item_stats.get('average_item_price', 0)
+                st.metric("Avg Item Price", f"${avg_price:.2f}" if avg_price > 0 else "N/A")
+        
+        # Show most common items if available
+        if item_stats and item_stats.get('most_common_items'):
+            with st.expander("📦 Most Common Items", expanded=False):
+                for item_info in item_stats['most_common_items'][:5]:
+                    st.write(f"• **{item_info['item']}** - appears {item_info['count']} time(s)")
+    
+    else:
+        # Check if this is a missed opportunity for expansion
+        has_item_columns = any(col in ['ITEMS_DESCRIPTION', 'ITEMS_UNIT_PRICE', 'ITEMS_QUANTITY'] 
+                              for col in results.get("columns", []))
+        
+        if has_item_columns:
+            st.info("� Displaying invoice-level data with JSON item arrays. For individual item analysis, ask questions like 'What items did I buy?' or 'Show me the most expensive item'.")
+        else:
+            st.info("📊 Displaying standard invoice-level data.")
     
     df = pd.DataFrame(results["data"], columns=results["columns"])
     
@@ -706,12 +678,8 @@ def display_results(results: dict):
         st.warning("Query returned no results")
         return
     
-    # Data table with pagination
+    # Add enhanced data display section
     st.subheader("📊 Query Results")
-    
-    # Show expansion info if applicable
-    if results.get('items_expanded'):
-        st.success(f"✅ Expanded from {results['original_row_count']} invoices to {results['expanded_row_count']} individual line items")
     
     # Add filters for large datasets
     if len(df) > 50:
@@ -725,7 +693,36 @@ def display_results(results: dict):
     else:
         df_display = df
     
-    st.dataframe(df_display, use_container_width=True)
+    # Enhanced dataframe display with better formatting
+    st.dataframe(
+        df_display, 
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "ITEM_LINE_TOTAL": st.column_config.NumberColumn(
+                "Line Total",
+                format="$%.2f"
+            ),
+            "ITEM_UNIT_PRICE": st.column_config.NumberColumn(
+                "Unit Price", 
+                format="$%.2f"
+            ),
+            "AMOUNT": st.column_config.NumberColumn(
+                "Amount",
+                format="$%.2f"
+            ),
+            "BALANCE_AMOUNT": st.column_config.NumberColumn(
+                "Balance",
+                format="$%.2f"
+            ),
+            "PAID": st.column_config.NumberColumn(
+                "Paid",
+                format="$%.2f"
+            )
+        }
+    )
+    
+    # Download option removed as requested
 
 def create_query_suggestions():
     """Provide helpful query suggestions to users"""
@@ -743,12 +740,20 @@ def create_query_suggestions():
     item_suggestions = [
         "What items did I purchase?",
         "Show me line item details", 
+        "What's the most expensive item?",
+        "List all items with quantity > 5",
         "What's the price of cloud storage?",
         "How much did I spend on software licenses?",
         "What products are on my invoices?",
         "Break down my invoice items",
         "Show me all hosting services I bought",
-        "What's the cost of support services?"
+        "What's the cost of support services?",
+        "What items were billed in my last invoice?",
+        "Show me itemized breakdown",
+        "What's the cheapest item I bought?",
+        "List all products with their prices",
+        "How many different items did I order?",
+        "What services did I purchase last month?"
     ]
     
     # Create tabs for different types of queries
