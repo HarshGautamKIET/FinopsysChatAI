@@ -5,7 +5,7 @@
 ## ✨ Features
 
 - **🔒 Security First**: Comprehensive security measures including SQL injection protection, rate limiting, and session management
-- **🤖 AI-Powered**: Dual AI model support (Google Gemini with Ollama DeepSeek fallback)
+- **🤖 AI-Powered**: Multi-model AI support (OpenAI GPT, Google Gemini, Ollama DeepSeek) with frontend selection
 - **👥 Vendor Context**: Strict vendor-specific data filtering and context management
 - **� Item Processing**: Intelligent parsing and expansion of JSON arrays and CSV item data
 - **📥 Export Options**: Download results in CSV, Excel, and JSON formats
@@ -26,7 +26,7 @@
 ### Prerequisites
 
 - Python 3.8+
-- Snowflake account with access credentials
+- PostgreSQL database with access credentials
 - Optional: Google Gemini API key for enhanced AI features
 
 ### Installation
@@ -48,14 +48,18 @@ cp .env.example .env
 
 # Edit .env with your actual credentials
 # Required:
-SNOWFLAKE_ACCOUNT=your_account_here
-SNOWFLAKE_USER=your_username_here
-SNOWFLAKE_PASSWORD=your_password_here
-SNOWFLAKE_WAREHOUSE=your_warehouse_here
-SNOWFLAKE_DATABASE=your_database_here
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_password_here
+POSTGRES_DATABASE=finopsys_db
+POSTGRES_SCHEMA=public
 
-# Optional (for enhanced AI features):
-GEMINI_API_KEY=your_api_key_here
+# Optional (for AI features - at least one recommended):
+OPENAI_API_KEY=your_openai_api_key_here    # Recommended default
+GEMINI_API_KEY=your_gemini_api_key_here    # Alternative
+DEFAULT_PROVIDER=openai                     # Set preferred provider
+DEFAULT_MODEL=gpt-4o-mini                   # Set preferred model
 ```
 
 4. **Run the application**
@@ -74,13 +78,13 @@ streamlit run streamlit/src/app.py
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `SNOWFLAKE_ACCOUNT` | ✅ | - | Your Snowflake account identifier |
-| `SNOWFLAKE_USER` | ✅ | - | Snowflake username |
-| `SNOWFLAKE_PASSWORD` | ✅ | - | Snowflake password |
-| `SNOWFLAKE_WAREHOUSE` | ✅ | `COMPUTE_WH` | Snowflake warehouse name |
-| `SNOWFLAKE_DATABASE` | ✅ | `DEMO_DB` | Snowflake database name |
-| `SNOWFLAKE_SCHEMA` | ❌ | `PUBLIC` | Snowflake schema name |
-| `SNOWFLAKE_ROLE` | ❌ | `ACCOUNTADMIN` | Snowflake role |
+| `POSTGRES_HOST` | ✅ | `localhost` | PostgreSQL server hostname |
+| `POSTGRES_PORT` | ❌ | `5432` | PostgreSQL server port |
+| `POSTGRES_USER` | ✅ | `postgres` | PostgreSQL username |
+| `POSTGRES_PASSWORD` | ✅ | - | PostgreSQL password |
+| `POSTGRES_DATABASE` | ✅ | `finopsys_db` | PostgreSQL database name |
+| `POSTGRES_SCHEMA` | ❌ | `public` | PostgreSQL schema name |
+| `OPENAI_API_KEY` | ❌ | - | OpenAI API key (recommended) |
 | `GEMINI_API_KEY` | ❌ | - | Google Gemini API key |
 | `OLLAMA_URL` | ❌ | `http://localhost:11434` | Ollama server URL |
 | `OLLAMA_MODEL` | ❌ | `deepseek-r1:1.5b` | Ollama model name |
@@ -93,16 +97,28 @@ streamlit run streamlit/src/app.py
 The application expects a table named `AI_INVOICE` with the following structure:
 
 ```sql
-CREATE TABLE AI_INVOICE (
-    CASE_ID VARCHAR,
-    VENDOR_ID VARCHAR,
-    AMOUNT NUMBER,
-    BALANCE_AMOUNT NUMBER,
-    PAID NUMBER,
-    STATUS VARCHAR,
-    BILL_DATE DATE,
-    DUE_DATE DATE,
-    -- Additional columns as needed
+CREATE TABLE ai_invoice (
+    case_id VARCHAR,
+    bill_id VARCHAR,
+    customer_id VARCHAR,
+    vendor_id VARCHAR,
+    due_date DATE,
+    bill_date DATE,
+    decline_date DATE,
+    receiving_date DATE,
+    approveddate1 DATE,
+    approveddate2 DATE,
+    amount DECIMAL,
+    balance_amount DECIMAL,
+    paid DECIMAL,
+    total_tax DECIMAL,
+    subtotal DECIMAL,
+    items_description TEXT,
+    items_unit_price TEXT,
+    items_quantity TEXT,
+    status VARCHAR,
+    decline_reason TEXT,
+    department VARCHAR
 );
 ```
 
@@ -247,11 +263,12 @@ See `SECURITY_FIXES_SUMMARY.md` for detailed information.
 ### Common Issues
 
 1. **Database Connection Failed**
-   - Verify Snowflake credentials in `.env`
+   - Verify PostgreSQL credentials in `.env`
    - Check network connectivity
-   - Ensure warehouse and database names are correct
+   - Ensure database and schema names are correct
 
 2. **No AI Model Available**
+   - Check OpenAI API key if using OpenAI models
    - Check Gemini API key if using Google Gemini
    - Ensure Ollama is running if using local models
    - Verify API endpoints are accessible

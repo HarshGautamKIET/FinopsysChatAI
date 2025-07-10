@@ -18,8 +18,8 @@ class DelimitedFieldProcessor:
     def __init__(self):
         """Initialize the processor with common delimiters and patterns"""
         self.common_delimiters = [',', ';', '|', '\n', '\t', '||', ';;']
-        self.item_columns = ['ITEMS_DESCRIPTION', 'ITEMS_UNIT_PRICE', 'ITEMS_QUANTITY']
-        self.numeric_columns = ['ITEMS_UNIT_PRICE', 'ITEMS_QUANTITY']
+        self.item_columns = ['items_description', 'items_unit_price', 'items_quantity']
+        self.numeric_columns = ['items_unit_price', 'items_quantity']
         
     def detect_delimiter(self, text: str) -> str:
         """Detect the most likely delimiter used in the text"""
@@ -33,10 +33,18 @@ class DelimitedFieldProcessor:
         best_delimiter = max(delimiter_counts, key=delimiter_counts.get)
         return best_delimiter if delimiter_counts[best_delimiter] > 0 else ','
     
-    def parse_delimited_field(self, text: str, delimiter: Optional[str] = None) -> List[str]:
-        """Parse a delimited text field into individual items - supports JSON arrays and CSV"""
-        if not text or not isinstance(text, str):
+    def parse_delimited_field(self, text, delimiter: Optional[str] = None) -> List[str]:
+        """Parse a delimited text field into individual items - supports Python lists, JSON arrays and CSV"""
+        if not text:
             return []
+        
+        # If it's already a Python list, return it directly (converted to strings)
+        if isinstance(text, list):
+            return [str(item).strip() for item in text if item is not None and str(item).strip()]
+        
+        # If it's not a string, convert it to string first
+        if not isinstance(text, str):
+            text = str(text)
         
         # First, try to parse as JSON array
         try:
@@ -60,10 +68,35 @@ class DelimitedFieldProcessor:
         
         return items
     
-    def parse_numeric_delimited_field(self, text: str, delimiter: Optional[str] = None) -> List[float]:
-        """Parse a delimited numeric field into individual numeric values - supports JSON arrays and CSV"""
-        if not text or not isinstance(text, str):
+    def parse_numeric_delimited_field(self, text, delimiter: Optional[str] = None) -> List[float]:
+        """Parse a delimited numeric field into individual numeric values - supports Python lists, JSON arrays and CSV"""
+        if not text:
             return []
+        
+        # If it's already a Python list, convert directly to floats
+        if isinstance(text, list):
+            numeric_items = []
+            for item in text:
+                try:
+                    if isinstance(item, (int, float)):
+                        numeric_items.append(float(item))
+                    elif isinstance(item, str):
+                        # Remove currency symbols and other non-numeric characters
+                        cleaned_item = re.sub(r'[^\d.-]', '', item)
+                        if cleaned_item:
+                            numeric_items.append(float(cleaned_item))
+                        else:
+                            numeric_items.append(0.0)
+                    else:
+                        numeric_items.append(float(item))
+                except (ValueError, TypeError):
+                    logger.debug(f"Could not convert list item to float: {item}")
+                    numeric_items.append(0.0)
+            return numeric_items
+        
+        # If it's not a string, convert it to string first
+        if not isinstance(text, str):
+            text = str(text)
         
         # First, try to parse as JSON array
         try:
@@ -113,9 +146,9 @@ class DelimitedFieldProcessor:
         items = []
         
         # Extract delimited fields
-        descriptions = self.parse_delimited_field(row.get('ITEMS_DESCRIPTION', ''))
-        unit_prices = self.parse_numeric_delimited_field(row.get('ITEMS_UNIT_PRICE', ''))
-        quantities = self.parse_numeric_delimited_field(row.get('ITEMS_QUANTITY', ''))
+        descriptions = self.parse_delimited_field(row.get('items_description', ''))
+        unit_prices = self.parse_numeric_delimited_field(row.get('items_unit_price', ''))
+        quantities = self.parse_numeric_delimited_field(row.get('items_quantity', ''))
         
         # Determine the maximum number of items
         max_items = max(len(descriptions), len(unit_prices), len(quantities))
@@ -246,8 +279,8 @@ class DelimitedFieldProcessor:
         
         # Generate item-focused queries
         queries = [
-            f"SELECT CASE_ID, ITEMS_DESCRIPTION, ITEMS_UNIT_PRICE, ITEMS_QUANTITY FROM AI_INVOICE WHERE vendor_id = '{vendor_id}' AND ITEMS_DESCRIPTION IS NOT NULL",
-            f"SELECT CASE_ID, INVOICE_DATE, ITEMS_DESCRIPTION, ITEMS_UNIT_PRICE, ITEMS_QUANTITY FROM AI_INVOICE WHERE vendor_id = '{vendor_id}' ORDER BY INVOICE_DATE DESC LIMIT 10"
+            f"SELECT case_id, items_description, items_unit_price, items_quantity FROM AI_INVOICE WHERE vendor_id = '{vendor_id}' AND items_description IS NOT NULL",
+            f"SELECT case_id, bill_date, items_description, items_unit_price, items_quantity FROM AI_INVOICE WHERE vendor_id = '{vendor_id}' ORDER BY bill_date DESC LIMIT 10"
         ]
         
         return queries
@@ -448,27 +481,27 @@ class DelimitedFieldProcessor:
             # Escape single quotes in product names
             escaped_product = product.replace("'", "''")
             
-            # Search for the product name within the ITEMS_DESCRIPTION field
-            # This handles both JSON arrays and CSV formats
-            like_conditions.append(f"LOWER(ITEMS_DESCRIPTION) LIKE LOWER('%{escaped_product}%')")
+            # Search for the product name within the items_description field
+            # Handle JSONB data by converting to text first
+            like_conditions.append(f"LOWER(items_description::text) LIKE LOWER('%{escaped_product}%')")
         
         where_clause = " OR ".join(like_conditions)
         
         # Enhanced SQL with better ordering and more comprehensive selection
         sql_query = f"""
         SELECT 
-            CASE_ID, 
-            INVOICE_DATE, 
-            AMOUNT, 
-            BALANCE_AMOUNT,
-            ITEMS_DESCRIPTION, 
-            ITEMS_UNIT_PRICE, 
-            ITEMS_QUANTITY,
-            STATUS
+            case_id, 
+            bill_date, 
+            amount, 
+            balance_amount,
+            items_description, 
+            items_unit_price, 
+            items_quantity,
+            status
         FROM AI_INVOICE 
         WHERE vendor_id = '{vendor_id}' 
         AND ({where_clause})
-        ORDER BY INVOICE_DATE DESC, CASE_ID DESC
+        ORDER BY bill_date DESC, case_id DESC
         LIMIT 100
         """
         

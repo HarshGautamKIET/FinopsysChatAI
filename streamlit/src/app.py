@@ -13,7 +13,8 @@ Features:
 
 import streamlit as st
 import logging
-import snowflake.connector
+import psycopg2
+import psycopg2.extras
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
@@ -48,17 +49,17 @@ logger = logging.getLogger(__name__)
 
 # Use environment variables
 config = Config()
-SNOWFLAKE_CONFIG = {
-    'account': config.SNOWFLAKE_ACCOUNT,
-    'user': config.SNOWFLAKE_USER,
-    'password': config.SNOWFLAKE_PASSWORD or os.getenv('SNOWFLAKE_PASSWORD'),
-    'warehouse': config.SNOWFLAKE_WAREHOUSE,
-    'database': config.SNOWFLAKE_DATABASE,
-    'schema': config.SNOWFLAKE_SCHEMA,
-    'role': config.SNOWFLAKE_ROLE
+POSTGRES_CONFIG = {
+    'host': config.POSTGRES_HOST,
+    'port': config.POSTGRES_PORT,
+    'user': config.POSTGRES_USER,
+    'password': config.POSTGRES_PASSWORD or os.getenv('POSTGRES_PASSWORD'),
+    'database': config.POSTGRES_DATABASE,
+    'options': f'-c search_path={config.POSTGRES_SCHEMA}'
 }
 
-# Use configuration for API key
+# Use configuration for API keys
+OPENAI_API_KEY = config.OPENAI_API_KEY or os.getenv('OPENAI_API_KEY')
 GEMINI_API_KEY = config.GEMINI_API_KEY or os.getenv('GEMINI_API_KEY')
 TARGET_TABLE = "AI_INVOICE"
 
@@ -114,57 +115,116 @@ rate_limiter = RateLimiter(max_requests=30, window_seconds=60)  # 30 requests pe
 class LLMManager:
     """Manages LLM model initialization with fallback mechanism"""
     def __init__(self):
-        self.primary_model = None
-        self.fallback_model = None
+        self.openai_model = None
+        self.gemini_model = None
+        self.ollama_model = None
         self.active_provider = None
+        self.available_providers = []
         self.column_reference = ColumnReferenceLoader()
         self.column_keywords = column_keywords
         
     def initialize_models(self) -> bool:
-        """Initialize LLM models with Gemini -> Ollama fallback"""
-        # Check if API key is available for Gemini
-        if not GEMINI_API_KEY:
-            logger.warning("⚠️ No Gemini API key provided, skipping Gemini initialization")
+        """Initialize LLM models with OpenAI -> Gemini -> Ollama fallback"""
+        success = False
+        
+        # Try OpenAI first
+        if OPENAI_API_KEY:
+            try:
+                import openai
+                # Test OpenAI connection
+                client = openai.OpenAI(api_key=OPENAI_API_KEY)
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": "Hello"}],
+                    max_tokens=10
+                )
+                if response and response.choices:
+                    self.openai_model = client
+                    self.available_providers.append("openai")
+                    if not self.active_provider:
+                        self.active_provider = "openai"
+                    logger.info("✅ OpenAI API initialized successfully")
+                    success = True
+            except ImportError:
+                logger.warning("❌ OpenAI library not installed")
+            except Exception as e:
+                logger.warning(f"❌ OpenAI initialization failed: {str(e)}")
         else:
-            # Try Gemini first
+            logger.warning("⚠️ No OpenAI API key provided")
+        
+        # Try Gemini second
+        if GEMINI_API_KEY:
             try:
                 import google.generativeai as genai
                 genai.configure(api_key=GEMINI_API_KEY)
-                self.primary_model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 
                 # Test Gemini connection
-                test_response = self.primary_model.generate_content("Hello")
+                test_response = model.generate_content("Hello")
                 if test_response and test_response.text:
-                    self.active_provider = "gemini"
+                    self.gemini_model = model
+                    self.available_providers.append("gemini")
+                    if not self.active_provider:
+                        self.active_provider = "gemini"
                     logger.info("✅ Gemini AI initialized successfully")
-                    return True
+                    success = True
             except ImportError:
                 logger.warning("❌ Google Generative AI library not installed")
             except Exception as e:
                 logger.warning(f"❌ Gemini initialization failed: {str(e)}")
+        else:
+            logger.warning("⚠️ No Gemini API key provided")
         
-        # Fallback to Ollama DeepSeek
+        # Fallback to Ollama
         try:
             import ollama
             client = ollama.Client(host=config.OLLAMA_URL)
             response = client.chat(
                 model=config.OLLAMA_MODEL, 
-                messages=[{'role': 'user', 'content': 'Hello'}]            )
+                messages=[{'role': 'user', 'content': 'Hello'}]
+            )
             
             if response and 'message' in response:
-                self.fallback_model = {'client': client, 'model': config.OLLAMA_MODEL}
-                self.active_provider = "ollama"
+                self.ollama_model = {'client': client, 'model': config.OLLAMA_MODEL}
+                self.available_providers.append("ollama")
+                if not self.active_provider:
+                    self.active_provider = "ollama"
                 logger.info("✅ Ollama DeepSeek initialized successfully")
-                return True
+                success = True
         except ImportError:
             logger.warning("❌ Ollama library not installed")
         except Exception as e:
             logger.warning(f"❌ Ollama initialization failed: {str(e)}")
         
-        logger.error("❌ No LLM models available")
+        if not success:
+            logger.error("❌ No LLM models available")
+        
+        return success
+    
+    def set_active_provider(self, provider: str) -> bool:
+        """Set active provider if available"""
+        if provider in self.available_providers:
+            self.active_provider = provider
+            logger.info(f"🔄 Switched to {provider.upper()} provider")
+            return True
         return False
     
-    def generate_response(self, prompt: str) -> str:
+    def get_available_models(self, provider: str) -> list:
+        """Get available models for a provider"""
+        if provider == "openai":
+            return [
+                "gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", 
+                "gpt-3.5-turbo", "gpt-3.5-turbo-16k"
+            ]
+        elif provider == "gemini":
+            return [
+                "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"
+            ]
+        elif provider == "ollama":
+            return [config.OLLAMA_MODEL]
+        return []
+    
+    def generate_response(self, prompt: str, model: str = None) -> str:
         """Generate response using active model with fallback"""
         # Check rate limiting
         client_id = st.session_state.get('session_id', 'anonymous')
@@ -172,36 +232,67 @@ class LLMManager:
             return "❌ Rate limit exceeded. Please wait before making another request."
         
         try:
-            if self.active_provider == "gemini" and self.primary_model:
-                response = self.primary_model.generate_content(prompt)
+            if self.active_provider == "openai" and self.openai_model:
+                # Use selected model from session state or default
+                model_name = model or getattr(st.session_state, 'selected_model', config.DEFAULT_MODEL)
+                if not model_name.startswith('gpt'):
+                    model_name = "gpt-4o-mini"
+                response = self.openai_model.chat.completions.create(
+                    model=model_name,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=2000,
+                    temperature=0.3
+                )
+                return response.choices[0].message.content if response.choices else "No response generated"
+                
+            elif self.active_provider == "gemini" and self.gemini_model:
+                # Use selected model from session state or default
+                model_name = model or getattr(st.session_state, 'selected_model', 'gemini-1.5-flash')
+                # Ensure we have a valid Gemini model name
+                if not model_name.startswith('gemini'):
+                    model_name = "gemini-1.5-flash"
+                # Create model instance with selected model
+                if model_name != getattr(self.gemini_model, '_model_name', 'gemini-1.5-flash'):
+                    import google.generativeai as genai
+                    self.gemini_model = genai.GenerativeModel(model_name)
+                response = self.gemini_model.generate_content(prompt)
                 return response.text if response and response.text else "No response generated"
                 
-            elif self.active_provider == "ollama" and self.fallback_model:
-                response = self.fallback_model['client'].chat(
-                    model=self.fallback_model['model'],
+            elif self.active_provider == "ollama" and self.ollama_model:
+                response = self.ollama_model['client'].chat(
+                    model=self.ollama_model['model'],
                     messages=[{'role': 'user', 'content': prompt}]
                 )
                 return response['message']['content'] if response and 'message' in response else "No response generated"
                 
         except Exception as e:
-            logger.error(f"❌ Response generation failed: {str(e)}")
-            # Try fallback if primary fails
-            if self.active_provider == "gemini" and self.fallback_model:
-                try:
-                    response = self.fallback_model['client'].chat(
-                        model=self.fallback_model['model'],
-                        messages=[{'role': 'user', 'content': prompt}]
-                    )
-                    self.active_provider = "ollama"
-                    logger.info("🔄 Switched to Ollama fallback after Gemini failure")
-                    return response['message']['content'] if response and 'message' in response else "Fallback failed"
-                except Exception as fallback_error:
-                    logger.error(f"❌ Fallback also failed: {str(fallback_error)}")
+            logger.error(f"❌ Response generation failed with {self.active_provider}: {str(e)}")
+            # Try fallback providers
+            for fallback_provider in self.available_providers:
+                if fallback_provider != self.active_provider:
+                    try:
+                        old_provider = self.active_provider
+                        self.active_provider = fallback_provider
+                        logger.info(f"🔄 Trying fallback to {fallback_provider.upper()}")
+                        
+                        # Use appropriate model for fallback provider
+                        fallback_model = None
+                        if fallback_provider == "openai":
+                            fallback_model = "gpt-4o-mini"
+                        elif fallback_provider == "gemini":
+                            fallback_model = "gemini-1.5-flash"
+                        elif fallback_provider == "ollama":
+                            fallback_model = config.OLLAMA_MODEL
+                        
+                        return self.generate_response(prompt, fallback_model)
+                    except Exception as fallback_error:
+                        logger.error(f"❌ Fallback to {fallback_provider} also failed: {str(fallback_error)}")
+                        continue
             
         return f"❌ Error: Unable to generate response. Please try again later."
 
-class SnowflakeManager:
-    """Enhanced Snowflake manager with connection pooling and security"""
+class PostgreSQLManager:
+    """Enhanced PostgreSQL manager with connection pooling and security"""
     
     def __init__(self):
         self.connection = None
@@ -210,12 +301,12 @@ class SnowflakeManager:
         self.connection_validated = False
         
     def connect(self) -> bool:
-        """Establish Snowflake connection with validation"""
+        """Establish PostgreSQL connection with validation"""
         try:
             # Validate configuration first
             config.validate_config()
             
-            self.connection = snowflake.connector.connect(**SNOWFLAKE_CONFIG)
+            self.connection = psycopg2.connect(**POSTGRES_CONFIG)
             
             # Test connection with a simple query
             cursor = self.connection.cursor()
@@ -225,17 +316,17 @@ class SnowflakeManager:
             
             if result and result[0] == 1:
                 self.connection_validated = True
-                logger.info("✅ Snowflake connection established and validated")
+                logger.info("✅ PostgreSQL connection established and validated")
                 return True
             else:
-                logger.error("❌ Snowflake connection test failed")
+                logger.error("❌ PostgreSQL connection test failed")
                 return False
                 
         except ValueError as e:
             logger.error(f"❌ Configuration error: {str(e)}")
             return False
         except Exception as e:
-            logger.error(f"❌ Snowflake connection failed: {str(e)}")
+            logger.error(f"❌ PostgreSQL connection failed: {str(e)}")
             return False
     
     def get_available_cases(self) -> list:
@@ -296,6 +387,14 @@ class SnowflakeManager:
         
         # Execute with proper error handling
         try:
+            # Reset connection on transaction error
+            if self.connection.closed:
+                self.connect()
+            
+            # Reset transaction state if needed
+            if self.connection.get_transaction_status() == psycopg2.extensions.TRANSACTION_STATUS_INERROR:
+                self.connection.rollback()
+                
             cursor = self.connection.cursor()
             cursor.execute(sql_query)
             results = cursor.fetchmany(1000)  # Limit results
@@ -314,7 +413,15 @@ class SnowflakeManager:
             
             return result
         except Exception as e:
-            raise AppError("Query execution failed", str(e))@staticmethod
+            # Reset connection on any error to prevent stuck transactions
+            try:
+                if self.connection and not self.connection.closed:
+                    self.connection.rollback()
+            except:
+                pass
+            raise AppError("Query execution failed", str(e))
+    
+    @staticmethod
     @st.cache_data(ttl=300)  # Cache for 5 minutes
     def get_cached_query_result(query_hash: str, query: str):
         """Cache frequently used queries"""
@@ -354,7 +461,7 @@ class ContextAwareChat:
     """Main chat application with context management"""
     def __init__(self):
         self.llm_manager = LLMManager()
-        self.db_manager = SnowflakeManager()
+        self.db_manager = PostgreSQLManager()
         self.delimited_processor = delimited_processor
         self.initialized = False
         
@@ -365,17 +472,40 @@ class ContextAwareChat:
         self.initialized = llm_success and db_success
         return self.initialized
     
+    def limit_data_for_llm(self, result: dict, max_rows: int = 50) -> dict:
+        """Limit the amount of data sent to LLM to prevent context length issues"""
+        if not result.get("success") or not result.get("data"):
+            return result
+        
+        # If data is within limit, return as is
+        if len(result["data"]) <= max_rows:
+            return result
+        
+        # Create a limited version for LLM
+        limited_result = result.copy()
+        limited_result["data"] = result["data"][:max_rows]
+        limited_result["truncated"] = True
+        limited_result["original_row_count"] = len(result["data"])
+        limited_result["displayed_row_count"] = max_rows
+        
+        return limited_result
+    
     def generate_sql_query(self, user_question: str) -> str:
         """Generate SQL query with vendor context and delimited field awareness"""
         if not self.db_manager.vendor_id:
             return "❌ Error: No vendor context established."
         
-        # Use the enhanced delimited processor to check for item queries
-        is_item_query = self.delimited_processor.is_item_query(user_question)
-        
-        # Check for specific product queries
-        is_specific_product_query = self.delimited_processor.is_specific_product_query(user_question)
-        extracted_products = self.delimited_processor.extract_product_names_from_query(user_question)
+        # ALWAYS use cached analysis when available - this prevents duplicate analysis
+        if hasattr(self, '_cached_query_analysis') and self._cached_query_analysis.get('question') == user_question:
+            is_item_query = self._cached_query_analysis['is_item_query']
+            is_specific_product_query = self._cached_query_analysis['is_specific_product_query']
+            extracted_products = self._cached_query_analysis['extracted_products']
+        else:
+            # Fallback: perform fresh analysis only if cache is not available
+            logger.warning("⚠️ No cached query analysis available, performing fresh analysis")
+            is_item_query = self.delimited_processor.is_item_query(user_question)
+            is_specific_product_query = self.delimited_processor.is_specific_product_query(user_question)
+            extracted_products = self.delimited_processor.extract_product_names_from_query(user_question)
         
         # If this is a specific product query, generate targeted SQL
         if is_specific_product_query and extracted_products:
@@ -406,15 +536,15 @@ IMPORTANT: These columns contain JSON arrays like ["Cloud Storage", "Support"] a
 For specific product searches, use LIKE operators: WHERE LOWER(ITEMS_DESCRIPTION) LIKE LOWER('%product_name%')
 
 Example for item queries:
-SELECT CASE_ID, INVOICE_DATE, ITEMS_DESCRIPTION, ITEMS_UNIT_PRICE, ITEMS_QUANTITY 
+SELECT case_id, bill_date, items_description, items_unit_price, items_quantity 
 FROM AI_INVOICE WHERE vendor_id = '{self.db_manager.vendor_id}'
-ORDER BY INVOICE_DATE DESC"""
+ORDER BY bill_date DESC"""
         
         prompt = f"""{enhanced_context}
 
 USER QUESTION: {user_question}
 
-Generate ONLY a valid SQL query for Snowflake database. Follow these strict requirements:
+Generate ONLY a valid SQL query for PostgreSQL database. Follow these strict requirements:
 1. ALWAYS include: WHERE vendor_id = '{self.db_manager.vendor_id}'
 2. Use ONLY the AI_INVOICE table
 3. Return ONLY the SQL query - no explanations, no markdown, no extra text
@@ -424,7 +554,7 @@ Generate ONLY a valid SQL query for Snowflake database. Follow these strict requ
 
 SQL QUERY:"""
         
-        sql_query = self.llm_manager.generate_response(prompt)
+        sql_query = self.llm_manager.generate_response(prompt, getattr(st.session_state, 'selected_model', None))
         
         # Clean up the response to extract just the SQL
         sql_query = sql_query.strip()
@@ -456,10 +586,31 @@ SQL QUERY:"""
             return "❌ No vendor context established. Please select a case ID first."
         
         try:
-            # Check if this is an item-level query and if it's asking about specific products
-            is_item_query = self.delimited_processor.is_item_query(user_question)
-            is_specific_product_query = self.delimited_processor.is_specific_product_query(user_question)
-            extracted_products = self.delimited_processor.extract_product_names_from_query(user_question)
+            # Check if we already processed this exact query recently to prevent duplicates
+            # Use session state for persistence across Streamlit reruns
+            last_processed_query = st.session_state.get('chat_last_processed_query', None)
+            last_query_response = st.session_state.get('chat_last_query_response', None)
+            
+            if last_processed_query == user_question and last_query_response:
+                logger.info(f"⚠️ Returning cached response for duplicate query: {user_question}")
+                return last_query_response
+            
+            # Cache the query analysis to avoid multiple calls during same request
+            if not hasattr(self, '_cached_query_analysis') or self._cached_query_analysis.get('question') != user_question:
+                logger.info(f"🔄 Performing fresh query analysis for: {user_question}")
+                self._cached_query_analysis = {
+                    'question': user_question,
+                    'is_item_query': self.delimited_processor.is_item_query(user_question),
+                    'is_specific_product_query': self.delimited_processor.is_specific_product_query(user_question),
+                    'extracted_products': self.delimited_processor.extract_product_names_from_query(user_question)
+                }
+            else:
+                logger.info(f"✅ Using cached query analysis for: {user_question}")
+            
+            # Use cached analysis
+            is_item_query = self._cached_query_analysis['is_item_query']
+            is_specific_product_query = self._cached_query_analysis['is_specific_product_query']
+            extracted_products = self._cached_query_analysis['extracted_products']
             
             # Generate SQL query (enhanced for item detection and specific products)
             sql_query = self.generate_sql_query(user_question)
@@ -473,8 +624,8 @@ SQL QUERY:"""
             # Always attempt item expansion for item queries or when item columns are present
             processed_result = result
             if result.get("success"):
-                # Check if result has item columns
-                has_item_columns = any(col in ['ITEMS_DESCRIPTION', 'ITEMS_UNIT_PRICE', 'ITEMS_QUANTITY'] 
+                # Check if result has item columns (using lowercase column names for PostgreSQL)
+                has_item_columns = any(col in ['items_description', 'items_unit_price', 'items_quantity'] 
                                      for col in result.get("columns", []))
                 
                 if is_item_query or has_item_columns:
@@ -488,6 +639,9 @@ SQL QUERY:"""
             # Create safe context for LLM response
             safe_context = response_restrictions.create_safe_context_prompt(self.db_manager.vendor_id)
             
+            # Limit data for LLM to prevent context length issues
+            llm_result = self.limit_data_for_llm(processed_result, max_rows=30)
+            
             # Generate natural language response with safety guidelines
             response_prompt = f"""
             {safe_context}
@@ -497,8 +651,10 @@ SQL QUERY:"""
             Based on the following SQL query and result:
             
             Query: {sql_query}
-            Result: {processed_result}
+            Result: {llm_result}
             User Question: {user_question}
+            
+            {"Note: This result was truncated to " + str(llm_result.get('displayed_row_count', 0)) + " rows out of " + str(llm_result.get('original_row_count', 0)) + " total rows for analysis." if llm_result.get('truncated') else ""}
             
             Provide a clear, concise answer to the user's question: {user_question}
             
@@ -507,7 +663,7 @@ SQL QUERY:"""
             
             {"ITEM-LEVEL ANALYSIS: This query involves individual items/products. The data has been automatically expanded to show individual line items. Provide insights about item-level details, quantities, pricing, and totals. Focus on product/service analysis." if processed_result.get('items_expanded') else ""}
             """
-            final_response = self.llm_manager.generate_response(response_prompt)
+            final_response = self.llm_manager.generate_response(response_prompt, getattr(st.session_state, 'selected_model', None))
             
             # Enhanced response formatting for specific product queries and general item queries
             if processed_result.get('items_expanded'):
@@ -527,11 +683,19 @@ SQL QUERY:"""
             # Filter the response to remove any sensitive information
             filtered_response = response_restrictions.filter_response(final_response)
             
+            # Cache the response for duplicate prevention in session state
+            st.session_state.chat_last_processed_query = user_question
+            st.session_state.chat_last_query_response = filtered_response
+            
             return filtered_response
             
         except Exception as e:
             logger.error(f"❌ Query processing failed: {str(e)}")
-            return f"❌ Error processing your query: {str(e)}"
+            error_response = f"❌ Error processing your query: {str(e)}"
+            # Cache error response too
+            st.session_state.chat_last_processed_query = user_question
+            st.session_state.chat_last_query_response = error_response
+            return error_response
 
 # Utility Functions for Streamlit UI
 def display_results(results: dict):
@@ -540,8 +704,8 @@ def display_results(results: dict):
         st.error("No data to display")
         return
     
-    # Check if results contain delimited item fields
-    has_item_columns = any(col in ['ITEMS_DESCRIPTION', 'ITEMS_UNIT_PRICE', 'ITEMS_QUANTITY'] 
+    # Check if results contain delimited item fields (using lowercase column names for PostgreSQL)
+    has_item_columns = any(col in ['items_description', 'items_unit_price', 'items_quantity'] 
                           for col in results.get("columns", []))
     
     original_results = results
@@ -550,34 +714,16 @@ def display_results(results: dict):
     if has_item_columns:
         st.info("📦 This query contains invoice line items with detailed product/service information.")
         
-        # Automatically check if data should be expanded based on content
-        df_temp = pd.DataFrame(results["data"], columns=results["columns"])
-        should_auto_expand = False
+        # Always auto-expand when item columns are present
+        st.success("🔍 **Auto-expanded**: Showing individual line items for better visibility")
+        results = delimited_processor.expand_results_with_items(results)
+        display_expanded = True
         
-        # Check if any item field contains JSON arrays or multiple items
-        for col in ['ITEMS_DESCRIPTION', 'ITEMS_UNIT_PRICE', 'ITEMS_QUANTITY']:
-            if col in df_temp.columns:
-                sample_values = df_temp[col].dropna().head(5)
-                for val in sample_values:
-                    if isinstance(val, str):
-                        # Check for JSON array format
-                        if (val.strip().startswith('[') and val.strip().endswith(']')) or ',' in val:
-                            should_auto_expand = True
-                            break
-                if should_auto_expand:
-                    break
-        
-        # Automatically expand if multiple items detected
-        if should_auto_expand:
-            st.success("🔍 **Auto-expanded**: Detected multiple items per invoice - showing individual line items")
-            results = delimited_processor.expand_results_with_items(results)
-            display_expanded = True
-            
-            if results.get('items_expanded'):
-                # Show item statistics
-                item_response = delimited_processor.format_item_response(original_results, "")
-                if item_response and item_response != "No detailed item information found in the query results.":
-                    st.markdown(item_response)
+        if results.get('items_expanded'):
+            # Show item statistics
+            item_response = delimited_processor.format_item_response(original_results, "")
+            if item_response and item_response != "No detailed item information found in the query results.":
+                st.markdown(item_response)
     
     df = pd.DataFrame(results["data"], columns=results["columns"])
     
@@ -751,6 +897,7 @@ def main():
         st.session_state.chat_app = ContextAwareChat()
         st.session_state.initialized = False
         st.session_state.vendor_context_set = False
+        st.session_state.vendor_context_logged = False
         st.session_state.messages = []
         # Store vendor context in session state for persistence
         st.session_state.vendor_id = None
@@ -761,10 +908,16 @@ def main():
     if (st.session_state.vendor_context_set and 
         st.session_state.vendor_id and 
         st.session_state.case_id):
-        # Always restore the vendor context to the database manager
-        st.session_state.chat_app.db_manager.vendor_id = st.session_state.vendor_id
-        st.session_state.chat_app.db_manager.case_id = st.session_state.case_id
-        logger.info(f"🔄 Restored vendor context: case_id={st.session_state.case_id}, vendor_id={st.session_state.vendor_id}")
+        # Only restore if not already set to avoid duplicate logging
+        if (st.session_state.chat_app.db_manager.vendor_id != st.session_state.vendor_id or
+            st.session_state.chat_app.db_manager.case_id != st.session_state.case_id):
+            st.session_state.chat_app.db_manager.vendor_id = st.session_state.vendor_id
+            st.session_state.chat_app.db_manager.case_id = st.session_state.case_id
+            
+            # Only log if this is a new restoration (not already logged in this session)
+            if not st.session_state.get('vendor_context_logged', False):
+                logger.info(f"🔄 Restored vendor context: case_id={st.session_state.case_id}, vendor_id={st.session_state.vendor_id}")
+                st.session_state.vendor_context_logged = True
         
     # Verify vendor context is properly set
     if st.session_state.vendor_context_set:
@@ -791,12 +944,58 @@ def main():
         else:
             st.success("✅ System Online")
             
+            # AI Model Selection
+            st.header("🤖 AI Model Settings")
+            
+            # Show available providers
+            available_providers = st.session_state.chat_app.llm_manager.available_providers
+            if available_providers:
+                current_provider = st.session_state.chat_app.llm_manager.active_provider
+                
+                # Provider selection
+                selected_provider = st.selectbox(
+                    "Select AI Provider:",
+                    available_providers,
+                    index=available_providers.index(current_provider) if current_provider in available_providers else 0,
+                    format_func=lambda x: {
+                        'openai': '🚀 OpenAI',
+                        'gemini': '🔍 Google Gemini', 
+                        'ollama': '🏠 Ollama (Local)'
+                    }.get(x, x.title())
+                )
+                
+                # Model selection for the selected provider
+                available_models = st.session_state.chat_app.llm_manager.get_available_models(selected_provider)
+                if available_models:
+                    # Get current model or default
+                    current_model = getattr(st.session_state, 'selected_model', available_models[0])
+                    selected_model = st.selectbox(
+                        "Select Model:",
+                        available_models,
+                        index=available_models.index(current_model) if current_model in available_models else 0
+                    )
+                    
+                    # Update provider and model if changed
+                    if selected_provider != current_provider:
+                        st.session_state.chat_app.llm_manager.set_active_provider(selected_provider)
+                        st.session_state.selected_model = selected_model
+                        st.rerun()
+                    elif getattr(st.session_state, 'selected_model', None) != selected_model:
+                        st.session_state.selected_model = selected_model
+                
+                # Show current active configuration
+                st.info(f"**Active:** {selected_provider.title()} - {getattr(st.session_state, 'selected_model', 'Default')}")
+            else:
+                st.error("❌ No AI providers available")
+            
             # Show active LLM provider
             provider = st.session_state.chat_app.llm_manager.active_provider
-            if provider == "gemini":
-                st.info("🤖 Using: Google Gemini AI")
+            if provider == "openai":
+                st.success("🚀 OpenAI Active")
+            elif provider == "gemini":
+                st.success("🔍 Google Gemini Active")
             elif provider == "ollama":
-                st.info("🤖 Using: Ollama DeepSeek (Fallback)")
+                st.success("🏠 Ollama Local Active")
             
             # Vendor context management
             st.header("👥 Vendor Context")
@@ -825,9 +1024,13 @@ def main():
                             success = st.session_state.chat_app.db_manager.set_vendor_context(selected_case)
                             if success:
                                 st.session_state.vendor_context_set = True
+                                st.session_state.vendor_context_logged = False  # Reset logging flag for new context
                                 # Store vendor context in session state for persistence
                                 st.session_state.vendor_id = st.session_state.chat_app.db_manager.vendor_id
                                 st.session_state.case_id = st.session_state.chat_app.db_manager.case_id
+                                # Clear any cached query analysis since we have a new context
+                                if hasattr(st.session_state.chat_app, '_cached_query_analysis'):
+                                    delattr(st.session_state.chat_app, '_cached_query_analysis')
                                 st.success("✅ Vendor context established!")
                                 st.rerun()
                             else:
@@ -853,6 +1056,7 @@ def main():
                     st.session_state.chat_app.db_manager.vendor_id = None
                     st.session_state.chat_app.db_manager.case_id = None
                     st.session_state.vendor_context_set = False
+                    st.session_state.vendor_context_logged = False
                     # Clear vendor context from session state
                     st.session_state.vendor_id = None
                     st.session_state.case_id = None
@@ -902,6 +1106,21 @@ def main():
         
         # Process the prompt
         if prompt:
+            # Check if this query was already processed in this session to prevent duplicates
+            last_processed_query = st.session_state.get('last_processed_query', None)
+            if last_processed_query == prompt:
+                logger.info(f"⚠️ Skipping duplicate query processing for: {prompt}")
+                return
+            
+            # If this is a different query, clear the previous flag
+            if last_processed_query and last_processed_query != prompt:
+                # Clear the previous query cache in session state
+                st.session_state.chat_last_processed_query = None
+                st.session_state.chat_last_query_response = None
+            
+            # Mark this query as being processed
+            st.session_state.last_processed_query = prompt
+            
             # Add user message to history
             st.session_state.messages.append({"role": "user", "content": prompt})
             

@@ -19,14 +19,14 @@ class QueryOptimizer:
             # Ensure vendor_id filter is positioned for optimal index usage
             sql_query = sql_query.replace(
                 f"vendor_id = '{vendor_id}'", 
-                f"vendor_id = '{vendor_id}' /*+ USE_INDEX(AI_INVOICE, vendor_id_idx) */"
+                f"vendor_id = '{vendor_id}' /* index hint for PostgreSQL */"
             )
         
-        # Add query hints for Snowflake optimization
+        # Add query hints for PostgreSQL optimization
         if "SELECT" in query_upper and "FROM AI_INVOICE" in query_upper:
             sql_query = sql_query.replace(
                 "FROM AI_INVOICE", 
-                "FROM AI_INVOICE /*+ CLUSTER(vendor_id) */"
+                "FROM AI_INVOICE /* PostgreSQL optimized */"
             )
         
         return sql_query
@@ -41,8 +41,8 @@ class QueryOptimizer:
             # For demo purposes, replace with common columns
             # In production, this should be configurable
             optimized_columns = [
-                "CASE_ID", "VENDOR_ID", "AMOUNT", "BALANCE_AMOUNT", 
-                "PAID", "STATUS", "BILL_DATE", "DUE_DATE"
+                "case_id", "vendor_id", "amount", "balance_amount", 
+                "paid", "status", "bill_date", "due_date"
             ]
             sql_query = sql_query.replace("SELECT *", f"SELECT {', '.join(optimized_columns)}")
         
@@ -120,7 +120,7 @@ class QueryOptimizer:
         if "vendor_id" not in query_upper.replace("VENDOR_ID", "vendor_id"):
             suggestions.append("Ensure vendor_id filtering for security and performance")
         
-        if "LIKE" in query_upper and not any(x in query_upper for x in ["ILIKE", "STARTSWITH", "ENDSWITH"]):
-            suggestions.append("Consider using ILIKE or string functions instead of LIKE for better performance")
+        if "LIKE" in query_upper and not any(x in query_upper for x in ["ILIKE", "~~", "!~~"]):
+            suggestions.append("Consider using ILIKE or PostgreSQL pattern matching for better performance")
         
         return suggestions

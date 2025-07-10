@@ -6,6 +6,9 @@ Utility module for loading and managing database column reference information
 import os
 from typing import Dict, List, Optional
 from column_keywords_mapping import column_keywords
+from config import Config
+
+config = Config()
 
 class ColumnReferenceLoader:
     """Loads and manages database column reference context for LLM queries"""
@@ -27,51 +30,54 @@ class ColumnReferenceLoader:
         # This is a simplified mapping - in production, you could parse the full MD file
         return {
             'identifiers': {
-                'columns': ['CASE_ID', 'BILL_ID', 'CUSTOMER_ID', 'VENDOR_ID', 'INVOICE_ID'],
+                'columns': ['case_id', 'bill_id', 'customer_id', 'vendor_id'],
                 'keywords': {
-                    'CASE_ID': ['case', 'case number', 'case detail', 'case reference'],
-                    'BILL_ID': ['bill', 'bill id', 'bill reference', 'bill number'],
-                    'CUSTOMER_ID': ['customer', 'client', 'customer id', 'client number'],
-                    'VENDOR_ID': ['vendor', 'supplier', 'vendor id', 'supplier id'],
-                    'INVOICE_ID': ['invoice', 'invoice id', 'invoice number']
+                    'case_id': ['case', 'case number', 'case detail', 'case reference'],
+                    'bill_id': ['bill', 'bill id', 'bill reference', 'bill number'],
+                    'customer_id': ['customer', 'client', 'customer id', 'client number'],
+                    'vendor_id': ['vendor', 'supplier', 'vendor id', 'supplier id']
                 }
             },
             'dates': {
-                'columns': ['DUE_DATE', 'BILL_DATE', 'DECLINE_DATE', 'RECEIVING_DATE', 'APPROVEDDATE1', 'APPROVEDDATE2', 'INVOICE_DATE'],
+                'columns': ['due_date', 'bill_date', 'decline_date', 'receiving_date', 'approveddate1', 'approveddate2'],
                 'keywords': {
-                    'DUE_DATE': ['due date', 'payment deadline', 'when to pay'],
-                    'BILL_DATE': ['bill date', 'billing date', 'when billed'],
-                    'INVOICE_DATE': ['invoice date', 'date created', 'issued on']
+                    'due_date': ['due date', 'payment deadline', 'when to pay'],
+                    'bill_date': ['bill date', 'billing date', 'when billed', 'invoice date', 'date created', 'issued on'],
+                    'decline_date': ['decline date', 'rejected date', 'when declined'],
+                    'receiving_date': ['receiving date', 'received date', 'when received'],
+                    'approveddate1': ['first approval date', 'initial approval'],
+                    'approveddate2': ['second approval date', 'final approval']
                 }
             },
             'financial': {
-                'columns': ['AMOUNT', 'BALANCE_AMOUNT', 'PAID', 'TOTAL_TAX', 'SUBTOTAL'],
+                'columns': ['amount', 'balance_amount', 'paid', 'total_tax', 'subtotal'],
                 'keywords': {
-                    'AMOUNT': ['total amount', 'bill total', 'invoice value', 'grand total'],
-                    'BALANCE_AMOUNT': ['balance', 'unpaid amount', 'outstanding amount'],
-                    'PAID': ['amount paid', 'payment received', 'paid amount'],
-                    'TOTAL_TAX': ['total tax', 'tax amount', 'VAT total', 'GST total'],
-                    'SUBTOTAL': ['subtotal', 'amount before tax', 'pre-tax amount']
+                    'amount': ['total amount', 'bill total', 'invoice value', 'grand total'],
+                    'balance_amount': ['balance', 'unpaid amount', 'outstanding amount'],
+                    'paid': ['amount paid', 'payment received', 'paid amount'],
+                    'total_tax': ['total tax', 'tax amount', 'VAT total', 'GST total'],
+                    'subtotal': ['subtotal', 'amount before tax', 'pre-tax amount']
                 }
             },
             'content': {
-                'columns': ['ITEMS_DESCRIPTION', 'ITEMS_UNIT_PRICE', 'ITEMS_QUANTITY'],
+                'columns': ['items_description', 'items_unit_price', 'items_quantity'],
                 'keywords': {
-                    'ITEMS_DESCRIPTION': ['item description', 'billed items', 'services listed'],
-                    'ITEMS_UNIT_PRICE': ['unit price', 'price per item', 'rate', 'cost per piece'],
-                    'ITEMS_QUANTITY': ['quantity', 'item count', 'units billed', 'how many items']
+                    'items_description': ['item description', 'billed items', 'services listed'],
+                    'items_unit_price': ['unit price', 'price per item', 'rate', 'cost per piece'],
+                    'items_quantity': ['quantity', 'item count', 'units billed', 'how many items']
                 }
             },
             'status': {
-                'columns': ['STATUS', 'DECLINE_REASON'],
+                'columns': ['status', 'decline_reason'],
                 'keywords': {
-                    'STATUS': ['invoice status', 'current state', 'approval status', 'is paid'],
-                    'DECLINE_REASON': ['reason for rejection', 'decline comment', 'why declined']
+                    'status': ['invoice status', 'current state', 'approval status', 'is paid'],
+                    'decline_reason': ['reason for rejection', 'decline comment', 'why declined']
                 }
             },
             'organization': {
-                'columns': ['DEPARTMENT'],
-                'keywords': {                    'DEPARTMENT': ['department name', 'approving team', 'billing department', 'finance department']
+                'columns': ['department'],
+                'keywords': {
+                    'department': ['department name', 'approving team', 'billing department', 'finance department']
                 }
             }
         }
@@ -86,8 +92,8 @@ class ColumnReferenceLoader:
         # Fallback to original implementation
         context = f"""
 DATABASE CONTEXT:
-- Database: FINOPSYS_DB
-- Schema: PUBLIC  
+- Database: {config.POSTGRES_DATABASE}
+- Schema: {config.POSTGRES_SCHEMA}
 - Table: AI_INVOICE
 
 COLUMN MAPPING GUIDE:
@@ -99,20 +105,20 @@ Status: {', '.join(self.column_mappings['status']['columns'])}
 Organization: {', '.join(self.column_mappings['organization']['columns'])}
 
 KEYWORD MAPPING EXAMPLES:
-- "total amount/bill total/invoice value" → AMOUNT
-- "unpaid/balance/outstanding" → BALANCE_AMOUNT
-- "paid amount/payment received" → PAID
-- "due date/payment deadline" → DUE_DATE
-- "invoice status/current state" → STATUS
-- "customer/client" → CUSTOMER_ID
-- "vendor/supplier" → VENDOR_ID
-- "case/case number" → CASE_ID
+- "total amount/bill total/invoice value" → amount
+- "unpaid/balance/outstanding" → balance_amount
+- "paid amount/payment received" → paid
+- "due date/payment deadline" → due_date
+- "invoice status/current state" → status
+- "customer/client" → customer_id
+- "vendor/supplier" → vendor_id
+- "case/case number" → case_id
 
 CRITICAL SECURITY REQUIREMENTS:
 1. MANDATORY: ALWAYS include WHERE vendor_id = '{vendor_id}' in EVERY query
 2. ONLY query the AI_INVOICE table
 3. Generate ONLY the SQL query, no explanations
-4. Use Snowflake SQL syntax
+4. Use PostgreSQL SQL syntax
 5. Map user keywords to correct column names using the guide above
 
 Current vendor context: vendor_id = {vendor_id}"""
@@ -126,10 +132,10 @@ Current vendor context: vendor_id = {vendor_id}"""
         """Get example SQL queries with proper vendor filtering"""
         return [
             f"SELECT COUNT(*) FROM AI_INVOICE WHERE vendor_id = '{vendor_id}'",
-            f"SELECT SUM(AMOUNT) FROM AI_INVOICE WHERE vendor_id = '{vendor_id}'",
-            f"SELECT * FROM AI_INVOICE WHERE BALANCE_AMOUNT > 0 AND vendor_id = '{vendor_id}'",
-            f"SELECT * FROM AI_INVOICE WHERE STATUS = 'Pending' AND vendor_id = '{vendor_id}'",
-            f"SELECT SUM(TOTAL_TAX) FROM AI_INVOICE WHERE vendor_id = '{vendor_id}'"
+            f"SELECT SUM(amount) FROM AI_INVOICE WHERE vendor_id = '{vendor_id}'",
+            f"SELECT * FROM AI_INVOICE WHERE balance_amount > 0 AND vendor_id = '{vendor_id}'",
+            f"SELECT * FROM AI_INVOICE WHERE status = 'Pending' AND vendor_id = '{vendor_id}'",
+            f"SELECT SUM(total_tax) FROM AI_INVOICE WHERE vendor_id = '{vendor_id}'"
         ]
     
     def find_column_for_keyword(self, keyword: str) -> Optional[str]:

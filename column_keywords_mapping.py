@@ -5,8 +5,10 @@ Comprehensive mapping of database columns to user-friendly keywords and alternat
 
 from typing import Dict, List, Optional, Set
 import logging
+from config import Config
 
 logger = logging.getLogger(__name__)
+config = Config()
 
 class ColumnKeywordsMapping:
     """Comprehensive mapping of database columns to user keywords and alternative terms"""
@@ -74,11 +76,13 @@ class ColumnKeywordsMapping:
             
             'BILL_DATE': {
                 'keywords': [
-                    'bill date', 'invoice bill date', 'billing date', 'bill generated on', 'when billed',
-                    'vendor billing date', 'invoice issue date', 'date of bill', 'when bill created', 'bill creation date'
+                    'bill date', 'invoice date', 'date created', 'issued on', 'when invoice made', 'invoice generated',
+                    'invoice creation date', 'invoice issue date', 'document date', 'date of invoice', 'invoice timestamp',
+                    'billing date', 'when billed', 'billing timestamp', 'invoice bill date', 'bill generated on',
+                    'vendor billing date', 'when bill created', 'bill creation date'
                 ],
                 'category': 'dates',
-                'description': 'Date when the bill was generated or issued'
+                'description': 'Date when the invoice was originally created or issued'
             },            
             'DECLINE_DATE': {
                 'keywords': [
@@ -116,10 +120,12 @@ class ColumnKeywordsMapping:
                 'description': 'Second level or final approval date'
             },
             
-            'INVOICE_DATE': {
+            # Note: bill_date is the actual PostgreSQL column name (lowercase)
+            'bill_date': {
                 'keywords': [
                     'invoice date', 'date created', 'issued on', 'when invoice made', 'invoice generated',
-                    'invoice creation date', 'invoice issue date', 'document date', 'date of invoice', 'invoice timestamp'
+                    'invoice creation date', 'invoice issue date', 'document date', 'date of invoice', 'invoice timestamp',
+                    'bill date', 'billing date', 'when billed', 'billing timestamp'
                 ],
                 'category': 'dates',
                 'description': 'Date when the invoice was originally created or issued'
@@ -273,8 +279,8 @@ class ColumnKeywordsMapping:
         
         context = f"""
 DATABASE CONTEXT:
-- Database: FINOPSYS_DB
-- Schema: PUBLIC  
+- Database: {config.POSTGRES_DATABASE}
+- Schema: {config.POSTGRES_SCHEMA}  
 - Table: AI_INVOICE
 
 COMPREHENSIVE COLUMN MAPPING GUIDE:
@@ -315,7 +321,7 @@ COMPREHENSIVE COLUMN MAPPING GUIDE:
 
 DELIMITED FIELDS SUPPORT:
 The following columns contain multiple items separated by delimiters (comma, semicolon, etc.):
-• ITEMS_DESCRIPTION: Multiple product/service names
+• items_description: Multiple product/service names
 • ITEMS_UNIT_PRICE: Multiple prices (one per item)  
 • ITEMS_QUANTITY: Multiple quantities (one per item)
 
@@ -325,24 +331,24 @@ CRITICAL SECURITY REQUIREMENTS:
 1. MANDATORY: ALWAYS include WHERE vendor_id = '{vendor_id}' in EVERY query
 2. ONLY query the AI_INVOICE table
 3. Generate ONLY the SQL query, no explanations
-4. Use Snowflake SQL syntax
+4. Use PostgreSQL SQL syntax
 5. Map user keywords to correct column names using the guide above
 
 KEYWORD MAPPING EXAMPLES:
 - "How many invoices" → COUNT(*) FROM AI_INVOICE WHERE vendor_id = '{vendor_id}'
-- "Total amount/bill total" → SUM(AMOUNT) WHERE vendor_id = '{vendor_id}'
-- "Unpaid/balance/outstanding" → SUM(BALANCE_AMOUNT) WHERE vendor_id = '{vendor_id}'
-- "Due date/payment deadline" → DUE_DATE WHERE vendor_id = '{vendor_id}'
-- "Invoice status/current state" → STATUS WHERE vendor_id = '{vendor_id}'
-- "What items/products" → SELECT ITEMS_DESCRIPTION, ITEMS_UNIT_PRICE, ITEMS_QUANTITY WHERE vendor_id = '{vendor_id}'
-- "Item breakdown/line items" → SELECT CASE_ID, ITEMS_* FROM AI_INVOICE WHERE vendor_id = '{vendor_id}'
-- "Cloud storage cost" → SELECT * FROM AI_INVOICE WHERE vendor_id = '{vendor_id}' AND LOWER(ITEMS_DESCRIPTION) LIKE '%cloud storage%'
-- "Support pricing" → SELECT * FROM AI_INVOICE WHERE vendor_id = '{vendor_id}' AND LOWER(ITEMS_DESCRIPTION) LIKE '%support%'
+- "Total amount/bill total" → SUM(amount) WHERE vendor_id = '{vendor_id}'
+- "Unpaid/balance/outstanding" → SUM(balance_amount) WHERE vendor_id = '{vendor_id}'
+- "Due date/payment deadline" → due_date WHERE vendor_id = '{vendor_id}'
+- "Invoice status/current state" → status WHERE vendor_id = '{vendor_id}'
+- "What items/products" → SELECT items_description, items_unit_price, items_quantity WHERE vendor_id = '{vendor_id}'
+- "Item breakdown/line items" → SELECT case_id, items_description, items_unit_price, items_quantity FROM AI_INVOICE WHERE vendor_id = '{vendor_id}'
+- "Cloud storage cost" → SELECT * FROM AI_INVOICE WHERE vendor_id = '{vendor_id}' AND LOWER(items_description) LIKE '%cloud storage%'
+- "Support pricing" → SELECT * FROM AI_INVOICE WHERE vendor_id = '{vendor_id}' AND LOWER(items_description) LIKE '%support%'
 
 PRODUCT-SPECIFIC QUERY GUIDANCE:
-- For questions about specific products/services, always include ITEMS_DESCRIPTION, ITEMS_UNIT_PRICE, ITEMS_QUANTITY
-- Use LIKE clauses to search within JSON arrays and CSV data: LOWER(ITEMS_DESCRIPTION) LIKE '%product_name%'
-- Include ORDER BY INVOICE_DATE DESC for recent data first
+- For questions about specific products/services, always include items_description, items_unit_price, items_quantity
+- Use LIKE clauses to search within JSON arrays and CSV data: LOWER(items_description) LIKE '%product_name%'
+- Include ORDER BY bill_date DESC for recent data first
 - Add LIMIT 100 for performance on large datasets
 
 Current vendor context: vendor_id = {vendor_id}"""
