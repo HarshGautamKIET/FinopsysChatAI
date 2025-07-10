@@ -124,82 +124,288 @@ class LLMManager:
         self.column_keywords = column_keywords
         
     def initialize_models(self) -> bool:
-        """Initialize LLM models with OpenAI -> Gemini -> Ollama fallback"""
+        """Initialize LLM models with comprehensive error handling and robust connections"""
         success = False
+        initialization_errors = []
         
-        # Try OpenAI first
-        if OPENAI_API_KEY:
-            try:
-                import openai
-                # Test OpenAI connection
-                client = openai.OpenAI(api_key=OPENAI_API_KEY)
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": "Hello"}],
-                    max_tokens=10
-                )
-                if response and response.choices:
-                    self.openai_model = client
-                    self.available_providers.append("openai")
-                    if not self.active_provider:
-                        self.active_provider = "openai"
-                    logger.info("✅ OpenAI API initialized successfully")
-                    success = True
-            except ImportError:
-                logger.warning("❌ OpenAI library not installed")
-            except Exception as e:
-                logger.warning(f"❌ OpenAI initialization failed: {str(e)}")
-        else:
-            logger.warning("⚠️ No OpenAI API key provided")
+        logger.info("🚀 Starting comprehensive LLM model initialization...")
         
-        # Try Gemini second
-        if GEMINI_API_KEY:
-            try:
-                import google.generativeai as genai
-                genai.configure(api_key=GEMINI_API_KEY)
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                
-                # Test Gemini connection
-                test_response = model.generate_content("Hello")
-                if test_response and test_response.text:
-                    self.gemini_model = model
-                    self.available_providers.append("gemini")
-                    if not self.active_provider:
-                        self.active_provider = "gemini"
-                    logger.info("✅ Gemini AI initialized successfully")
-                    success = True
-            except ImportError:
-                logger.warning("❌ Google Generative AI library not installed")
-            except Exception as e:
-                logger.warning(f"❌ Gemini initialization failed: {str(e)}")
-        else:
-            logger.warning("⚠️ No Gemini API key provided")
+        # Initialize OpenAI with robust error handling
+        success |= self._initialize_openai(initialization_errors)
         
-        # Fallback to Ollama
+        # Initialize Gemini with enhanced connection handling
+        success |= self._initialize_gemini(initialization_errors)
+        
+        # Initialize Ollama with local fallback
+        success |= self._initialize_ollama(initialization_errors)
+        
+        # Handle initialization results
+        if not success and not self.available_providers:
+            logger.error("❌ No LLM models available - running in offline mode")
+            logger.info("🔍 Initialization Summary:")
+            for error in initialization_errors:
+                logger.info(f"   • {error}")
+            self.available_providers.append("offline")
+            self.active_provider = "offline"
+            self.initialization_errors = initialization_errors
+        
+        # Log final status
+        logger.info(f"🔄 Available providers: {self.available_providers}")
+        logger.info(f"🎯 Active provider: {self.active_provider}")
+        
+        return success or len(self.available_providers) > 0
+    
+    def _initialize_openai(self, initialization_errors: list) -> bool:
+        """Initialize OpenAI with comprehensive error handling"""
+        if not OPENAI_API_KEY or len(OPENAI_API_KEY.strip()) == 0:
+            error_msg = "No OpenAI API key provided"
+            logger.warning(f"⚠️ {error_msg}")
+            initialization_errors.append(f"OpenAI: {error_msg}")
+            return False
+        
         try:
-            import ollama
-            client = ollama.Client(host=config.OLLAMA_URL)
-            response = client.chat(
-                model=config.OLLAMA_MODEL, 
-                messages=[{'role': 'user', 'content': 'Hello'}]
+            import openai
+            logger.info("🔄 Attempting OpenAI initialization...")
+            
+            # Validate API key format
+            if not OPENAI_API_KEY.startswith('sk-'):
+                error_msg = "Invalid OpenAI API key format"
+                logger.error(f"❌ {error_msg}")
+                initialization_errors.append(f"OpenAI: {error_msg}")
+                return False
+            
+            # Create client with robust configuration
+            client = openai.OpenAI(
+                api_key=OPENAI_API_KEY,
+                timeout=30.0,
+                max_retries=2,
+                base_url="https://api.openai.com/v1"  # Explicit base URL
             )
             
-            if response and 'message' in response:
-                self.ollama_model = {'client': client, 'model': config.OLLAMA_MODEL}
-                self.available_providers.append("ollama")
+            # Test connection with minimal request
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": "Hi"}],
+                max_tokens=5,
+                temperature=0
+            )
+            
+            if response and response.choices and response.choices[0].message:
+                self.openai_model = client
+                self.available_providers.append("openai")
                 if not self.active_provider:
-                    self.active_provider = "ollama"
-                logger.info("✅ Ollama DeepSeek initialized successfully")
-                success = True
+                    self.active_provider = "openai"
+                logger.info("✅ OpenAI API initialized successfully")
+                return True
+            else:
+                error_msg = "OpenAI test call returned empty response"
+                logger.warning(f"❌ {error_msg}")
+                initialization_errors.append(f"OpenAI: {error_msg}")
+                return False
+                
         except ImportError:
-            logger.warning("❌ Ollama library not installed")
+            error_msg = "OpenAI library not installed - run: pip install openai"
+            logger.warning(f"❌ {error_msg}")
+            initialization_errors.append(f"OpenAI: {error_msg}")
+            return False
         except Exception as e:
-            logger.warning(f"❌ Ollama initialization failed: {str(e)}")
+            error_str = str(e).lower()
+            if 'authentication' in error_str or 'unauthorized' in error_str:
+                error_msg = "OpenAI authentication failed - check your API key"
+                logger.error(f"❌ {error_msg}")
+                initialization_errors.append(f"OpenAI: Invalid API key")
+            elif 'rate limit' in error_str or 'quota' in error_str:
+                error_msg = "OpenAI rate limit/quota exceeded"
+                logger.warning(f"❌ {error_msg}")
+                initialization_errors.append(f"OpenAI: Rate limit exceeded")
+            elif 'connection' in error_str or 'network' in error_str or 'dns' in error_str:
+                error_msg = f"OpenAI connection failed - network issue: {str(e)}"
+                logger.warning(f"❌ {error_msg}")
+                initialization_errors.append(f"OpenAI: Network connectivity issue")
+            else:
+                error_msg = f"OpenAI initialization failed: {str(e)}"
+                logger.warning(f"❌ {error_msg}")
+                initialization_errors.append(f"OpenAI: {str(e)}")
+            return False
+    
+    def _initialize_gemini(self, initialization_errors: list) -> bool:
+        """Initialize Gemini with enhanced connection handling"""
+        if not GEMINI_API_KEY or len(GEMINI_API_KEY.strip()) == 0:
+            error_msg = "No Gemini API key provided"
+            logger.warning(f"⚠️ {error_msg}")
+            initialization_errors.append(f"Gemini: {error_msg}")
+            return False
         
-        if not success:
-            logger.error("❌ No LLM models available")
-        
-        return success
+        try:
+            import google.generativeai as genai
+            logger.info("🔄 Attempting Gemini initialization...")
+            
+            # Validate API key format
+            if not GEMINI_API_KEY.startswith('AIza'):
+                error_msg = "Invalid Gemini API key format"
+                logger.error(f"❌ {error_msg}")
+                initialization_errors.append(f"Gemini: {error_msg}")
+                return False
+            
+            # Configure Gemini
+            genai.configure(api_key=GEMINI_API_KEY)
+            
+            # Create model with safety settings
+            generation_config = {
+                "temperature": 0.3,
+                "top_p": 1,
+                "top_k": 1,
+                "max_output_tokens": 100,
+            }
+            
+            safety_settings = [
+                {
+                    "category": "HARM_CATEGORY_HARASSMENT",
+                    "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+                },
+                {
+                    "category": "HARM_CATEGORY_HATE_SPEECH",
+                    "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+                },
+                {
+                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+                },
+                {
+                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+                },
+            ]
+            
+            model = genai.GenerativeModel(
+                'gemini-1.5-flash',
+                generation_config=generation_config,
+                safety_settings=safety_settings
+            )
+            
+            # Test connection with timeout using concurrent futures
+            import concurrent.futures
+            
+            def test_gemini():
+                return model.generate_content("Hi")
+            
+            try:
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(test_gemini)
+                    response = future.result(timeout=20)  # 20 second timeout
+            except concurrent.futures.TimeoutError:
+                error_msg = "Gemini connection timeout - network issue"
+                logger.warning(f"❌ {error_msg}")
+                initialization_errors.append(f"Gemini: Connection timeout")
+                return False
+            
+            if response and response.text:
+                self.gemini_model = model
+                self.available_providers.append("gemini")
+                if not self.active_provider:
+                    self.active_provider = "gemini"
+                logger.info("✅ Gemini AI initialized successfully")
+                return True
+            else:
+                error_msg = "Gemini test call returned empty response"
+                logger.warning(f"❌ {error_msg}")
+                initialization_errors.append(f"Gemini: {error_msg}")
+                return False
+                
+        except ImportError:
+            error_msg = "Google Generative AI library not installed - run: pip install google-generativeai"
+            logger.warning(f"❌ {error_msg}")
+            initialization_errors.append(f"Gemini: {error_msg}")
+            return False
+        except Exception as e:
+            error_str = str(e).lower()
+            if 'api_key' in error_str or 'authentication' in error_str or 'invalid' in error_str:
+                error_msg = "Gemini authentication failed - check your API key"
+                logger.error(f"❌ {error_msg}")
+                initialization_errors.append(f"Gemini: Invalid API key")
+            elif 'quota' in error_str or 'rate' in error_str:
+                error_msg = "Gemini quota/rate limit exceeded"
+                logger.warning(f"❌ {error_msg}")
+                initialization_errors.append(f"Gemini: Rate limit exceeded")
+            elif 'blocked' in error_str or 'safety' in error_str:
+                error_msg = "Gemini safety filter blocked request"
+                logger.warning(f"❌ {error_msg}")
+                initialization_errors.append(f"Gemini: Safety filter issue")
+            elif 'connection' in error_str or 'network' in error_str or 'timeout' in error_str:
+                error_msg = f"Gemini connection failed - network issue: {str(e)}"
+                logger.warning(f"❌ {error_msg}")
+                initialization_errors.append(f"Gemini: Network connectivity issue")
+            else:
+                error_msg = f"Gemini initialization failed: {str(e)}"
+                logger.warning(f"❌ {error_msg}")
+                initialization_errors.append(f"Gemini: {str(e)}")
+            return False
+    
+    def _initialize_ollama(self, initialization_errors: list) -> bool:
+        """Initialize Ollama with local connection handling"""
+        try:
+            import ollama
+            logger.info("🔄 Attempting Ollama initialization...")
+            
+            # Test Ollama connection with timeout
+            client = ollama.Client(host=config.OLLAMA_URL)
+            
+            # Simple test to check if Ollama is running
+            try:
+                # First check if Ollama service is available
+                models = client.list()
+                logger.info(f"🔍 Ollama models available: {len(models.get('models', []))}")
+                
+                # Test with the configured model
+                response = client.chat(
+                    model=config.OLLAMA_MODEL,
+                    messages=[{'role': 'user', 'content': 'Hi'}]
+                )
+                
+                if response and 'message' in response and response['message'].get('content'):
+                    self.ollama_model = {
+                        'client': client,
+                        'model': config.OLLAMA_MODEL
+                    }
+                    self.available_providers.append("ollama")
+                    if not self.active_provider:
+                        self.active_provider = "ollama"
+                    logger.info(f"✅ Ollama ({config.OLLAMA_MODEL}) initialized successfully")
+                    return True
+                else:
+                    error_msg = f"Ollama model {config.OLLAMA_MODEL} not responding properly"
+                    logger.warning(f"❌ {error_msg}")
+                    initialization_errors.append(f"Ollama: {error_msg}")
+                    return False
+                    
+            except Exception as model_error:
+                if 'not found' in str(model_error).lower():
+                    error_msg = f"Ollama model {config.OLLAMA_MODEL} not found - please pull the model first"
+                    logger.warning(f"❌ {error_msg}")
+                    initialization_errors.append(f"Ollama: Model not found")
+                else:
+                    raise model_error
+                    
+        except ImportError:
+            error_msg = "Ollama library not installed - run: pip install ollama"
+            logger.warning(f"❌ {error_msg}")
+            initialization_errors.append(f"Ollama: {error_msg}")
+            return False
+        except Exception as e:
+            error_str = str(e).lower()
+            if 'connection' in error_str or 'refused' in error_str:
+                error_msg = f"Ollama connection failed - is Ollama running at {config.OLLAMA_URL}?"
+                logger.warning(f"❌ {error_msg}")
+                initialization_errors.append(f"Ollama: Service not running")
+            elif 'timeout' in error_str:
+                error_msg = f"Ollama connection timeout at {config.OLLAMA_URL}"
+                logger.warning(f"❌ {error_msg}")
+                initialization_errors.append(f"Ollama: Connection timeout")
+            else:
+                error_msg = f"Ollama initialization failed: {str(e)}"
+                logger.warning(f"❌ {error_msg}")
+                initialization_errors.append(f"Ollama: {str(e)}")
+            return False
     
     def set_active_provider(self, provider: str) -> bool:
         """Set active provider if available"""
@@ -231,17 +437,23 @@ class LLMManager:
         if not rate_limiter.is_allowed(client_id):
             return "❌ Rate limit exceeded. Please wait before making another request."
         
+        # Handle offline mode
+        if self.active_provider == "offline":
+            return self._generate_offline_response(prompt)
+        
         try:
             if self.active_provider == "openai" and self.openai_model:
                 # Use selected model from session state or default
                 model_name = model or getattr(st.session_state, 'selected_model', config.DEFAULT_MODEL)
                 if not model_name.startswith('gpt'):
                     model_name = "gpt-4o-mini"
+                    
                 response = self.openai_model.chat.completions.create(
                     model=model_name,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=2000,
-                    temperature=0.3
+                    temperature=0.3,
+                    timeout=30.0
                 )
                 return response.choices[0].message.content if response.choices else "No response generated"
                 
@@ -266,30 +478,65 @@ class LLMManager:
                 return response['message']['content'] if response and 'message' in response else "No response generated"
                 
         except Exception as e:
-            logger.error(f"❌ Response generation failed with {self.active_provider}: {str(e)}")
-            # Try fallback providers
-            for fallback_provider in self.available_providers:
-                if fallback_provider != self.active_provider:
-                    try:
-                        old_provider = self.active_provider
-                        self.active_provider = fallback_provider
-                        logger.info(f"🔄 Trying fallback to {fallback_provider.upper()}")
-                        
-                        # Use appropriate model for fallback provider
-                        fallback_model = None
-                        if fallback_provider == "openai":
-                            fallback_model = "gpt-4o-mini"
-                        elif fallback_provider == "gemini":
-                            fallback_model = "gemini-1.5-flash"
-                        elif fallback_provider == "ollama":
-                            fallback_model = config.OLLAMA_MODEL
-                        
-                        return self.generate_response(prompt, fallback_model)
-                    except Exception as fallback_error:
-                        logger.error(f"❌ Fallback to {fallback_provider} also failed: {str(fallback_error)}")
-                        continue
+            # Handle specific OpenAI errors if available
+            error_type = type(e).__name__
+            if 'AuthenticationError' in error_type:
+                logger.error("❌ OpenAI authentication failed - API key may be invalid")
+            elif 'RateLimitError' in error_type:
+                logger.warning("❌ OpenAI rate limit exceeded")
+            elif 'APIConnectionError' in error_type or 'ConnectionError' in error_type:
+                logger.error(f"❌ Connection error: {str(e)}")
+            else:
+                logger.error(f"❌ Response generation failed with {self.active_provider}: {str(e)}")
             
-        return f"❌ Error: Unable to generate response. Please try again later."
+        # Try fallback providers
+        for fallback_provider in self.available_providers:
+            if fallback_provider != self.active_provider and fallback_provider != "offline":
+                try:
+                    old_provider = self.active_provider
+                    self.active_provider = fallback_provider
+                    logger.info(f"🔄 Trying fallback to {fallback_provider.upper()}")
+                    
+                    # Use appropriate model for fallback provider
+                    fallback_model = None
+                    if fallback_provider == "openai":
+                        fallback_model = "gpt-4o-mini"
+                    elif fallback_provider == "gemini":
+                        fallback_model = "gemini-1.5-flash"
+                    elif fallback_provider == "ollama":
+                        fallback_model = config.OLLAMA_MODEL
+                    
+                    return self.generate_response(prompt, fallback_model)
+                except Exception as fallback_error:
+                    logger.error(f"❌ Fallback to {fallback_provider} also failed: {str(fallback_error)}")
+                    continue
+        
+        # Final fallback to offline mode
+        logger.warning("🔄 All providers failed, switching to offline mode")
+        self.active_provider = "offline"
+        return self._generate_offline_response(prompt)
+    
+    def _generate_offline_response(self, prompt: str) -> str:
+        """Generate basic response when no LLM is available"""
+        prompt_lower = prompt.lower()
+        
+        # Basic pattern matching for common queries
+        if any(word in prompt_lower for word in ['total', 'sum', 'amount']):
+            return ("💰 **Financial Analysis:** I can help you analyze financial data, but LLM services are currently unavailable. "
+                   "The query results will be displayed below with raw data.")
+        
+        elif any(word in prompt_lower for word in ['item', 'product', 'service']):
+            return ("📦 **Product Analysis:** I can retrieve item-level data, but detailed analysis requires LLM services which are currently unavailable. "
+                   "Please check the data table below for product information.")
+        
+        elif any(word in prompt_lower for word in ['overdue', 'due', 'payment']):
+            return ("⏰ **Payment Status:** Payment-related data will be shown below. "
+                   "LLM services are unavailable for detailed analysis.")
+        
+        else:
+            return ("🔍 **Data Query:** Your query has been processed and results are shown below. "
+                   "Advanced analysis is temporarily unavailable due to connectivity issues. "
+                   "Please review the data table for information.")
 
 class PostgreSQLManager:
     """Enhanced PostgreSQL manager with connection pooling and security"""
@@ -666,22 +913,11 @@ SQL QUERY:"""
             final_response = self.llm_manager.generate_response(response_prompt, getattr(st.session_state, 'selected_model', None))
             
             # Enhanced response formatting for specific product queries and general item queries
-            if processed_result.get('items_expanded'):
-                if is_specific_product_query and extracted_products:
-                    # Use specialized product-specific response formatting
-                    product_summary = self.delimited_processor.format_product_specific_response(
-                        processed_result, user_question, extracted_products
-                    )
-                    if product_summary and "No information found" not in product_summary:
-                        final_response = f"{final_response}\n\n{product_summary}"
-                else:
-                    # Use general item response formatting
-                    item_summary = self.delimited_processor.format_item_response(processed_result, user_question)
-                    if item_summary and "No detailed item information found" not in item_summary:
-                        final_response = f"{final_response}\n\n{item_summary}"
+            formatted_response = self.format_enhanced_response(final_response, processed_result, user_question, 
+                                                               is_specific_product_query, extracted_products, llm_result)
             
             # Filter the response to remove any sensitive information
-            filtered_response = response_restrictions.filter_response(final_response)
+            filtered_response = response_restrictions.filter_response(formatted_response)
             
             # Cache the response for duplicate prevention in session state
             st.session_state.chat_last_processed_query = user_question
@@ -696,6 +932,339 @@ SQL QUERY:"""
             st.session_state.chat_last_processed_query = user_question
             st.session_state.chat_last_query_response = error_response
             return error_response
+
+    def format_enhanced_response(self, raw_response: str, processed_result: dict, user_question: str, 
+                               is_specific_product_query: bool, extracted_products: list, llm_result: dict) -> str:
+        """Enhanced response formatting with improved structure, emojis, and visual hierarchy"""
+        
+        # Start with formatted sections
+        response_sections = []
+        
+        # Add query summary header
+        query_summary = self._create_query_summary(user_question, processed_result)
+        if query_summary:
+            response_sections.append(query_summary)
+        
+        # Add data context if available (truncation info)
+        if llm_result.get('truncated'):
+            response_sections.append(
+                f"📊 **Data Summary:** Analyzed {llm_result.get('displayed_row_count', 0)} rows "
+                f"out of {llm_result.get('original_row_count', 0)} total results"
+            )
+        
+        # Clean and format the main LLM response
+        clean_response = self._clean_llm_response(raw_response)
+        
+        # Add main response with improved formatting
+        if clean_response:
+            # Add contextual header based on query type
+            if 'total' in user_question.lower() or 'sum' in user_question.lower():
+                response_sections.append(f"💰 **Financial Summary:**\n{clean_response}")
+            elif 'item' in user_question.lower() or 'product' in user_question.lower():
+                response_sections.append(f"📦 **Product Analysis:**\n{clean_response}")
+            elif 'overdue' in user_question.lower() or 'due' in user_question.lower():
+                response_sections.append(f"⏰ **Payment Status:**\n{clean_response}")
+            elif 'trend' in user_question.lower() or 'pattern' in user_question.lower():
+                response_sections.append(f"📈 **Trend Analysis:**\n{clean_response}")
+            else:
+                response_sections.append(f"💡 **Analysis:**\n{clean_response}")
+        
+        # Add specialized formatting for different query types
+        if processed_result.get('items_expanded'):
+            if is_specific_product_query and extracted_products:
+                # Product-specific insights
+                product_summary = self.delimited_processor.format_product_specific_response(
+                    processed_result, user_question, extracted_products
+                )
+                if product_summary and "No information found" not in product_summary:
+                    # Enhance product summary with better formatting
+                    enhanced_product_summary = self._enhance_product_summary(product_summary, extracted_products)
+                    response_sections.append(f"🎯 **Product Details:**\n{enhanced_product_summary}")
+            else:
+                # General item insights
+                item_summary = self.delimited_processor.format_item_response(processed_result, user_question)
+                if item_summary and "No detailed item information found" not in item_summary:
+                    response_sections.append(f"📦 **Item Breakdown:**\n{item_summary}")
+        
+        # Add key metrics summary if applicable
+        metrics_summary = self._extract_key_metrics(processed_result, user_question)
+        if metrics_summary:
+            response_sections.append(f"📊 **Key Metrics:**\n{metrics_summary}")
+        
+        # Add data quality indicators
+        data_quality_info = self._get_data_quality_info(processed_result)
+        if data_quality_info:
+            response_sections.append(f"ℹ️ **Data Insights:**\n{data_quality_info}")
+        
+        # Combine all sections with proper spacing (removed Next Steps and footer)
+        final_response = "\n\n---\n\n".join(response_sections)
+        
+        return final_response
+    
+    def _clean_llm_response(self, response: str) -> str:
+        """Clean and format the raw LLM response with proper line breaks"""
+        if not response:
+            return ""
+        
+        # Remove common LLM artifacts
+        response = response.strip()
+        
+        # Remove redundant phrases
+        redundant_phrases = [
+            "Based on the query results,",
+            "According to the data,",
+            "The query shows that",
+            "Looking at the results,",
+            "From the data provided,",
+            "The analysis shows",
+            "Here's what I found:",
+            "Based on your query:"
+        ]
+        
+        for phrase in redundant_phrases:
+            if response.lower().startswith(phrase.lower()):
+                response = response[len(phrase):].strip()
+        
+        # Split into sentences for better formatting
+        import re
+        
+        # Split on periods followed by space and capital letter or end of string
+        sentences = re.split(r'\.(?=\s+[A-Z]|$)', response)
+        formatted_lines = []
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+                
+            # Add back the period if it was removed by split
+            if not sentence.endswith('.') and not sentence.endswith('!') and not sentence.endswith('?'):
+                sentence += '.'
+            
+            # Check for paragraph-starting keywords
+            paragraph_starters = [
+                'Total', 'However', 'Additionally', 'Furthermore', 'In summary', 
+                'Overall', 'The', 'This', 'These', 'Most', 'All', 'Some', 'Each'
+            ]
+            
+            # Format based on content
+            if any(sentence.startswith(starter) for starter in paragraph_starters):
+                formatted_lines.append(sentence)
+                formatted_lines.append("")  # Add blank line for spacing
+            elif sentence.startswith('- ') or sentence.startswith('* '):
+                # Handle bullet points
+                formatted_lines.append(sentence)
+            elif re.match(r'^\d+[\.)]\s', sentence):
+                # Handle numbered lists
+                formatted_lines.append(sentence)
+            else:
+                # Regular sentence
+                formatted_lines.append(sentence)
+                formatted_lines.append("")  # Add spacing after each sentence
+        
+        # Remove extra blank lines at the end
+        while formatted_lines and formatted_lines[-1] == "":
+            formatted_lines.pop()
+        
+        # Join with newlines for proper formatting
+        formatted_text = '\n'.join(formatted_lines)
+        
+        # Add emphasis to important terms
+        important_terms = ['overdue', 'unpaid', 'balance', 'due', 'paid', 'outstanding']
+        for term in important_terms:
+            formatted_text = re.sub(
+                rf'\b{re.escape(term)}\b', 
+                f'**{term}**', 
+                formatted_text, 
+                flags=re.IGNORECASE
+            )
+        
+        # Highlight currency amounts
+        formatted_text = re.sub(r'\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)', r'**$\1**', formatted_text)
+        
+        return formatted_text
+    
+    def _get_data_quality_info(self, processed_result: dict) -> str:
+        """Generate concise data quality information"""
+        if not processed_result.get('success') or not processed_result.get('data'):
+            return ""
+        
+        row_count = len(processed_result['data'])
+        info_parts = []
+        
+        # Simple data completeness
+        if row_count > 0:
+            if processed_result.get('items_expanded'):
+                original_count = processed_result.get('original_row_count', 0)
+                if original_count > 0:
+                    info_parts.append(f"**Data Expanded:** {original_count} invoices → {row_count} line items")
+            else:
+                info_parts.append(f"**Records Analyzed:** {row_count}")
+        
+        return '\n'.join(info_parts) if info_parts else ""
+    
+    def _get_response_suggestions(self, user_question: str, processed_result: dict) -> str:
+        """Generate helpful suggestions based on the query and results"""
+        suggestions = []
+        
+        # Query-specific suggestions
+        question_lower = user_question.lower()
+        
+        if 'total' in question_lower or 'sum' in question_lower:
+            suggestions.append("Try asking about average amounts or trends over time")
+            suggestions.append("Ask 'Show me monthly spending patterns' for trend analysis")
+        
+        if 'overdue' in question_lower or 'due' in question_lower:
+            suggestions.append("You can also ask about payment patterns or aging reports")
+            suggestions.append("Try 'Which vendor has the most overdue invoices?'")
+        
+        if 'item' in question_lower or 'product' in question_lower:
+            suggestions.append("Ask about specific products by name for detailed analysis")
+            suggestions.append("Try 'What's the most expensive item?' or 'Show me recurring services'")
+            suggestions.append("Ask 'Find all software-related expenses' for category analysis")
+        
+        if 'price' in question_lower or 'cost' in question_lower:
+            suggestions.append("Compare prices: 'What's the price range for cloud services?'")
+            suggestions.append("Ask 'Show me price trends for hosting services'")
+        
+        # Data-driven suggestions based on results
+        if processed_result.get('success') and processed_result.get('data'):
+            columns = [c.lower() for c in processed_result.get('columns', [])]
+            row_count = len(processed_result['data'])
+            
+            if 'bill_date' in columns and row_count > 5:
+                suggestions.append("Explore trends: 'Show me spending by month' or 'What's my quarterly total?'")
+            
+            if any('items_' in col for col in columns):
+                suggestions.append("Dive deeper: 'What items appear most frequently?' or 'Find my software expenses'")
+                suggestions.append("Category analysis: 'Group items by type' or 'Show me service vs product costs'")
+            
+            if 'balance_amount' in columns:
+                suggestions.append("Payment insights: 'What's my average payment time?' or 'Show unpaid balances'")
+            
+            if row_count > 20:
+                suggestions.append("Filter results: 'Show only invoices over $1000' or 'Find recent transactions'")
+            
+            # Smart suggestions based on data patterns
+            if processed_result.get('items_expanded'):
+                suggestions.append("Product analysis: 'What's my most common purchase?' or 'Compare vendor pricing'")
+        
+        # Context-aware suggestions
+        if not suggestions:
+            suggestions.extend([
+                "Ask about spending patterns: 'What's my monthly average?'",
+                "Explore vendor relationships: 'Which vendor do I use most?'",
+                "Analyze payment behavior: 'How quickly do I pay invoices?'"
+            ])
+        
+        # Limit to top 3 most relevant suggestions
+        return '\n'.join([f"  • {s}" for s in suggestions[:3]]) if suggestions else ""
+
+    def _create_query_summary(self, user_question: str, processed_result: dict) -> str:
+        """Create a concise summary of what the query is about"""
+        if not processed_result.get('success'):
+            return ""
+        
+        row_count = len(processed_result.get('data', []))
+        
+        # Simple, clean summary without emojis
+        return f"**Query Results:** {row_count} records found"
+    
+    def _classify_query_type(self, user_question: str) -> str:
+        """Classify the type of query for better formatting"""
+        question_lower = user_question.lower()
+        
+        financial_keywords = ['total', 'sum', 'amount', 'cost', 'price', 'spend', 'balance']
+        product_keywords = ['item', 'product', 'service', 'software', 'hosting', 'cloud']
+        temporal_keywords = ['month', 'year', 'trend', 'pattern', 'time', 'date', 'recent']
+        status_keywords = ['overdue', 'due', 'paid', 'unpaid', 'status', 'outstanding']
+        
+        if any(keyword in question_lower for keyword in financial_keywords):
+            return 'financial'
+        elif any(keyword in question_lower for keyword in product_keywords):
+            return 'product'
+        elif any(keyword in question_lower for keyword in temporal_keywords):
+            return 'temporal'
+        elif any(keyword in question_lower for keyword in status_keywords):
+            return 'status'
+        else:
+            return 'general'
+    
+    def _enhance_product_summary(self, product_summary: str, extracted_products: list) -> str:
+        """Enhance product summary with better formatting"""
+        if not product_summary:
+            return ""
+        
+        # Add product names as headers if multiple products
+        if len(extracted_products) > 1:
+            enhanced = f"*Found information for: {', '.join(extracted_products)}*\n\n{product_summary}"
+        else:
+            enhanced = f"*Product: {extracted_products[0]}*\n\n{product_summary}"
+        
+        # Format currency values
+        import re
+        currency_pattern = r'\$?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'
+        enhanced = re.sub(currency_pattern, r'**$\1**', enhanced)
+        
+        return enhanced
+    
+    def _extract_key_metrics(self, processed_result: dict, user_question: str) -> str:
+        """Extract and format key numerical metrics from the data"""
+        if not processed_result.get('success') or not processed_result.get('data'):
+            return ""
+        
+        data = processed_result['data']
+        columns = [c.lower() for c in processed_result.get('columns', [])]
+        metrics = []
+        
+        try:
+            # Find amount-related columns
+            amount_columns = [i for i, col in enumerate(columns) if 'amount' in col or 'total' in col or 'price' in col]
+            
+            for col_idx in amount_columns:
+                col_name = processed_result['columns'][col_idx]
+                values = []
+                
+                for row in data:
+                    if len(row) > col_idx and row[col_idx] is not None:
+                        try:
+                            # Handle both string and numeric values
+                            val = float(str(row[col_idx]).replace(',', '').replace('$', ''))
+                            values.append(val)
+                        except:
+                            continue
+                
+                if values:
+                    total = sum(values)
+                    avg = total / len(values)
+                    max_val = max(values)
+                    min_val = min(values)
+                    
+                    metrics.append(f"**{col_name.replace('_', ' ').title()}:**")
+                    metrics.append(f"  • Total: ${total:,.2f}")
+                    if len(values) > 1:
+                        metrics.append(f"  • Average: ${avg:,.2f}")
+                        metrics.append(f"  • Range: ${min_val:,.2f} - ${max_val:,.2f}")
+        except:
+            pass  # Skip if calculation fails
+        
+        return '\n'.join(metrics) if metrics else ""
+    
+    def _create_response_footer(self, processed_result: dict) -> str:
+        """Create a helpful footer with context and tips"""
+        if not processed_result.get('success'):
+            return ""
+        
+        footer_parts = []
+        
+        # Add data source context
+        if processed_result.get('items_expanded'):
+            footer_parts.append("🔍 *This analysis includes detailed line-item data for comprehensive insights.*")
+        
+        # Add helpful reminders
+        footer_parts.append("💡 *Tip: Try asking follow-up questions to explore specific aspects of your data.*")
+        
+        return '\n'.join(footer_parts) if footer_parts else ""
 
 # Utility Functions for Streamlit UI
 def display_results(results: dict):
@@ -872,6 +1441,19 @@ def show_system_metrics():
         with col3:
             active_provider = st.session_state.chat_app.llm_manager.active_provider if 'chat_app' in st.session_state else "None"
             st.metric("AI Provider", active_provider.title() if active_provider else "Not Set")
+            
+        # Debug information for troubleshooting
+        if st.checkbox("🔧 Show Debug Info"):
+            debug_info = {
+                "Last Processed Query": st.session_state.get('last_processed_query', 'None'),
+                "Processing in Progress": st.session_state.get('processing_in_progress', False),
+                "Current Request ID": st.session_state.get('current_request_id', 'None'),
+                "Last Processing Time": str(st.session_state.get('last_processed_time', 'None')),
+                "Vendor Context Set": st.session_state.get('vendor_context_set', False),
+                "Available Providers": st.session_state.chat_app.llm_manager.available_providers if 'chat_app' in st.session_state else []
+            }
+            
+            st.json(debug_info)
 
 # Streamlit App
 def main():
@@ -1085,7 +1667,15 @@ def main():
         # Display chat history
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
-                st.markdown(message["content"])                  # If this is an assistant message with query results, display them
+                # Enhanced display for assistant messages
+                if message["role"] == "assistant":
+                    # Add a subtle container for better visual separation
+                    with st.container():
+                        st.markdown(message["content"])
+                else:
+                    st.markdown(message["content"])
+                
+                # If this is an assistant message with query results, display them
                 if (message["role"] == "assistant" and 
                     "data" in message and 
                     isinstance(message["data"], dict)):
@@ -1104,60 +1694,190 @@ def main():
         if chat_input:
             prompt = chat_input
         
-        # Process the prompt
+        # Process the prompt with enhanced duplicate prevention
         if prompt:
-            # Check if this query was already processed in this session to prevent duplicates
+            # Create a unique request ID for this processing session
+            import hashlib
+            import time
+            request_id = hashlib.md5(f"{prompt}{time.time()}{id(st.session_state)}".encode()).hexdigest()[:8]
+            
+            # Enhanced duplicate prevention with multiple checks
+            current_time = datetime.now()
             last_processed_query = st.session_state.get('last_processed_query', None)
-            if last_processed_query == prompt:
-                logger.info(f"⚠️ Skipping duplicate query processing for: {prompt}")
+            last_processed_time = st.session_state.get('last_processed_time', datetime.min)
+            processing_in_progress = st.session_state.get('processing_in_progress', False)
+            last_request_id = st.session_state.get('last_request_id', None)
+            
+            # Check if same query is currently being processed
+            if processing_in_progress and last_processed_query == prompt:
+                logger.warning(f"⚠️ Query already being processed (request_id: {request_id}): {prompt}")
+                st.warning("⏳ This query is already being processed. Please wait...")
                 return
             
-            # If this is a different query, clear the previous flag
+            # Check if same query was processed very recently (within 5 seconds)
+            time_since_last = (current_time - last_processed_time).total_seconds()
+            if (last_processed_query == prompt and time_since_last < 5):
+                logger.warning(f"⚠️ Skipping duplicate query (request_id: {request_id}, time_since: {time_since_last:.1f}s): {prompt}")
+                st.info(f"⏳ This query was processed {time_since_last:.1f} seconds ago. Please wait before resubmitting.")
+                return
+            
+            # Check if this is a repeat submission of the exact same request
+            if last_request_id and st.session_state.get('processing_completed', True) == False:
+                logger.warning(f"⚠️ Previous request still processing (last_id: {last_request_id}, new_id: {request_id})")
+                st.warning("⏳ Previous request is still being processed. Please wait...")
+                return
+            
+            # Mark processing as in progress with enhanced tracking
+            st.session_state.processing_in_progress = True
+            st.session_state.processing_completed = False
+            st.session_state.last_processed_query = prompt
+            st.session_state.last_processed_time = current_time
+            st.session_state.current_request_id = request_id
+            st.session_state.last_request_id = request_id
+            
+            # Add to request log for debugging with enhanced info
+            if 'request_log' not in st.session_state:
+                st.session_state.request_log = []
+            st.session_state.request_log.append({
+                'time': current_time.strftime('%H:%M:%S.%f')[:-3],  # Include milliseconds
+                'request_id': request_id,
+                'query': prompt[:50] + "..." if len(prompt) > 50 else prompt,
+                'status': 'started'
+            })
+            # Keep only last 15 entries for better debugging
+            if len(st.session_state.request_log) > 15:
+                st.session_state.request_log = st.session_state.request_log[-15:]
+            
+            logger.info(f"🔄 Starting query processing (request_id: {request_id}): {prompt}")
+            
+            # Clear previous cache if this is a different query
             if last_processed_query and last_processed_query != prompt:
-                # Clear the previous query cache in session state
                 st.session_state.chat_last_processed_query = None
                 st.session_state.chat_last_query_response = None
+                logger.info(f"🧹 Cleared cache for new query (request_id: {request_id})")
             
-            # Mark this query as being processed
-            st.session_state.last_processed_query = prompt
-            
-            # Add user message to history
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            
-            # Display user message
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            
-            # Generate and display response
-            with st.chat_message("assistant"):
-                with st.spinner("Processing your query..."):
-                    try:
-                        response = st.session_state.chat_app.process_user_query(prompt)
-                        st.markdown(response)
-                        
-                        # Check for and display query results
-                        if hasattr(st.session_state.chat_app.db_manager, 'last_query_result'):
-                            results = st.session_state.chat_app.db_manager.last_query_result
-                            if results and results.get("success"):
-                                display_results(results)
-                                # Store message with data for persistence
+            try:
+                # Add user message to history with duplicate prevention
+                last_message = st.session_state.messages[-1] if st.session_state.messages else None
+                user_message_exists = (last_message and 
+                                     last_message.get("content") == prompt and 
+                                     last_message.get("role") == "user")
+                
+                if not user_message_exists:
+                    st.session_state.messages.append({
+                        "role": "user", 
+                        "content": prompt,
+                        "request_id": request_id,
+                        "timestamp": current_time.isoformat()
+                    })
+                    logger.info(f"📝 Added user message to history (request_id: {request_id})")
+                else:
+                    logger.info(f"📝 User message already exists in history (request_id: {request_id})")
+                
+                # Display user message
+                with st.chat_message("user"):
+                    st.markdown(prompt)
+                
+                # Generate and display response with enhanced error handling
+                with st.chat_message("assistant"):
+                    with st.spinner(f"🤖 Processing your query... (ID: {request_id})"):
+                        try:
+                            response = st.session_state.chat_app.process_user_query(prompt)
+                            
+                            # Enhanced response display with better formatting
+                            st.markdown(response)
+                            
+                            # Update request log
+                            for log_entry in st.session_state.request_log:
+                                if log_entry['request_id'] == request_id:
+                                    log_entry['status'] = 'completed'
+                                    break
+                            
+                            # Check for and display query results with enhanced handling
+                            results_displayed = False
+                            if hasattr(st.session_state.chat_app.db_manager, 'last_query_result'):
+                                results = st.session_state.chat_app.db_manager.last_query_result
+                                if results and results.get("success"):
+                                    display_results(results)
+                                    results_displayed = True
+                                    
+                                    # Store message with data for persistence (enhanced duplicate prevention)
+                                    last_assistant_message = st.session_state.messages[-1] if st.session_state.messages else None
+                                    assistant_message_exists = (last_assistant_message and 
+                                                              last_assistant_message.get("role") == "assistant" and 
+                                                              last_assistant_message.get("content") == response and
+                                                              last_assistant_message.get("request_id") != request_id)
+                                    
+                                    if not assistant_message_exists:
+                                        st.session_state.messages.append({
+                                            "role": "assistant", 
+                                            "content": response,
+                                            "data": results,
+                                            "request_id": request_id,
+                                            "timestamp": datetime.now().isoformat(),
+                                            "has_results": True
+                                        })
+                                        logger.info(f"📝 Added assistant message with results (request_id: {request_id})")
+                                    else:
+                                        logger.info(f"📝 Assistant message with results already exists (request_id: {request_id})")
+                            
+                            # Store message without data if no results
+                            if not results_displayed:
+                                last_assistant_message = st.session_state.messages[-1] if st.session_state.messages else None
+                                assistant_message_exists = (last_assistant_message and 
+                                                          last_assistant_message.get("role") == "assistant" and 
+                                                          last_assistant_message.get("content") == response and
+                                                          last_assistant_message.get("request_id") != request_id)
+                                
+                                if not assistant_message_exists:
+                                    st.session_state.messages.append({
+                                        "role": "assistant", 
+                                        "content": response,
+                                        "request_id": request_id,
+                                        "timestamp": datetime.now().isoformat(),
+                                        "has_results": False
+                                    })
+                                    logger.info(f"📝 Added assistant message without results (request_id: {request_id})")
+                                else:
+                                    logger.info(f"📝 Assistant message without results already exists (request_id: {request_id})")
+                            
+                            logger.info(f"✅ Completed processing (request_id: {request_id})")
+                                
+                        except Exception as e:
+                            error_msg = f"❌ Error processing query: {str(e)}"
+                            st.error(error_msg)
+                            
+                            # Update request log
+                            for log_entry in st.session_state.request_log:
+                                if log_entry['request_id'] == request_id:
+                                    log_entry['status'] = 'error'
+                                    log_entry['error'] = str(e)
+                                    break
+                            
+                            # Store error message with duplicate prevention
+                            last_assistant_message = st.session_state.messages[-1] if st.session_state.messages else None
+                            error_message_exists = (last_assistant_message and 
+                                                  last_assistant_message.get("role") == "assistant" and 
+                                                  last_assistant_message.get("content") == error_msg and
+                                                  last_assistant_message.get("request_id") != request_id)
+                            
+                            if not error_message_exists:
                                 st.session_state.messages.append({
                                     "role": "assistant", 
-                                    "content": response,
-                                    "data": results
+                                    "content": error_msg,
+                                    "request_id": request_id,
+                                    "timestamp": datetime.now().isoformat(),
+                                    "error": True
                                 })
-                            else:
-                                # Store message without data
-                                st.session_state.messages.append({"role": "assistant", "content": response})
-                        else:
-                            # Store message without data
-                            st.session_state.messages.append({"role": "assistant", "content": response})
+                                logger.info(f"📝 Added error message (request_id: {request_id})")
                             
-                    except Exception as e:
-                        error_msg = f"❌ Error processing query: {str(e)}"
-                        st.error(error_msg)
-                        st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                        logger.error(f"Query processing error: {str(e)}")
+                            logger.error(f"❌ Query processing error (request_id: {request_id}): {str(e)}")
+            
+            finally:
+                # Always clear processing flags with enhanced cleanup
+                st.session_state.processing_in_progress = False
+                st.session_state.processing_completed = True
+                logger.info(f"🏁 Processing completed and flags cleared (request_id: {request_id})")
     
     elif st.session_state.initialized:
         st.info("👆 Please select a case ID in the sidebar to establish vendor context")
