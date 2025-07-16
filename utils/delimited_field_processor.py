@@ -207,16 +207,20 @@ class DelimitedFieldProcessor:
         if not expanded_rows:
             return results
         
-        # Create new column list
+        # Create new column list (exclude CASE_ID from frontend display)
         new_columns = []
+        display_columns = []
         for col in columns:
             if col not in self.item_columns:
-                new_columns.append(col)
+                new_columns.append(col)  # Keep for internal processing
+                if col.lower() not in ['case_id']:  # Exclude from display
+                    display_columns.append(col)
         
-        # Add new item columns
+        # Add new item columns to both lists
         new_columns.extend(['ITEM_INDEX', 'ITEM_DESCRIPTION', 'ITEM_UNIT_PRICE', 'ITEM_QUANTITY', 'ITEM_LINE_TOTAL'])
+        display_columns.extend(['ITEM_INDEX', 'ITEM_DESCRIPTION', 'ITEM_UNIT_PRICE', 'ITEM_QUANTITY', 'ITEM_LINE_TOTAL'])
         
-        # Convert back to list format
+        # Convert back to list format (include all columns for processing)
         expanded_data = []
         for row in expanded_rows:
             data_row = []
@@ -224,10 +228,20 @@ class DelimitedFieldProcessor:
                 data_row.append(row.get(col, ''))
             expanded_data.append(data_row)
         
+        # Create display data (exclude CASE_ID)
+        display_data = []
+        for row in expanded_rows:
+            data_row = []
+            for col in display_columns:
+                data_row.append(row.get(col, ''))
+            display_data.append(data_row)
+        
         return {
             'success': True,
-            'data': expanded_data,
-            'columns': new_columns,
+            'data': expanded_data,  # Full data for internal processing
+            'display_data': display_data,  # Data without CASE_ID for frontend
+            'columns': new_columns,  # All columns for processing
+            'display_columns': display_columns,  # Columns without CASE_ID for frontend
             'original_row_count': len(results['data']),
             'expanded_row_count': len(expanded_data),
             'items_expanded': True

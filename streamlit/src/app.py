@@ -1294,7 +1294,16 @@ def display_results(results: dict):
             if item_response and item_response != "No detailed item information found in the query results.":
                 st.markdown(item_response)
     
-    df = pd.DataFrame(results["data"], columns=results["columns"])
+    # Use display data if available (excludes CASE_ID), otherwise filter it out
+    if 'display_data' in results and 'display_columns' in results:
+        df = pd.DataFrame(results["display_data"], columns=results["display_columns"])
+    else:
+        df = pd.DataFrame(results["data"], columns=results["columns"])
+        # Hide CASE_ID column from frontend display
+        if 'case_id' in df.columns:
+            df = df.drop(columns=['case_id'])
+        elif 'CASE_ID' in df.columns:
+            df = df.drop(columns=['CASE_ID'])
     
     if df.empty:
         st.warning("Query returned no results")
