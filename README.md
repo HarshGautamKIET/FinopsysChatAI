@@ -27,13 +27,15 @@
 
 - Python 3.8+
 - PostgreSQL database with access credentials
-- Optional: Google Gemini API key for enhanced AI features
+- **Recommended**: OpenAI API key (primary LLM provider)
+- **Alternative**: Google Gemini API key (backup LLM provider)
+- **Optional**: Ollama server for local AI models
 
 ### Installation
 
 1. **Navigate to the application directory**
 ```bash
-cd chatbot_SQL
+cd FinopsysChatAI
 ```
 
 2. **Install dependencies**
@@ -41,7 +43,19 @@ cd chatbot_SQL
 pip install -r requirements.txt
 ```
 
-3. **Set up environment variables**
+3. **Install required LLM libraries**
+```bash
+# For OpenAI support (recommended)
+pip install openai
+
+# For Gemini support (alternative)
+pip install google-generativeai
+
+# For Ollama support (optional local AI)
+# Download from: https://ollama.ai/
+```
+
+4. **Set up environment variables**
 ```bash
 # Copy the environment template
 cp .env.example .env
@@ -55,9 +69,9 @@ POSTGRES_PASSWORD=your_password_here
 POSTGRES_DATABASE=finopsys_db
 POSTGRES_SCHEMA=public
 
-# Optional (for AI features - at least one recommended):
-OPENAI_API_KEY=your_openai_api_key_here    # Recommended default
-GEMINI_API_KEY=your_gemini_api_key_here    # Alternative
+# AI Provider Configuration (at least one required):
+OPENAI_API_KEY=your_openai_api_key_here    # Primary recommendation
+GEMINI_API_KEY=your_gemini_api_key_here    # Backup option
 DEFAULT_PROVIDER=openai                     # Set preferred provider
 DEFAULT_MODEL=gpt-4o-mini                   # Set preferred model
 ```
